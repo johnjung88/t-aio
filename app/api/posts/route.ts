@@ -1,30 +1,43 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
+import { ok, fail, zodErrorDetails } from '@/lib/api'
+import { normalizePosts } from '@/lib/entities'
 import { readStore, writeStore } from '@/lib/store'
+import { postCreateBodySchema, parsePostQuery, type PostCreateInput } from '@/lib/schemas'
 import type { ThreadPost } from '@/lib/types'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const status = searchParams.get('status')
-  const account = searchParams.get('account')
+  const query = parsePostQuery({
+    status: searchParams.get('status'),
+    account: searchParams.get('account'),
+  })
 
-  let posts = readStore<ThreadPost[]>('posts', [])
+  const normalized = normalizePosts(readStore<ThreadPost[]>('posts', []))
+  writeStore('posts', normalized)
 
-  if (status) posts = posts.filter((p) => p.status === status)
-  if (account) posts = posts.filter((p) => p.account === account)
+  let posts = normalized
+  if (query.status) posts = posts.filter((post) => post.status === query.status)
+  if (query.account) posts = posts.filter((post) => post.account === query.account)
 
-  // Sort newest first
   posts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-
-  return NextResponse.json(posts)
+  return ok(posts)
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json()
-  const posts = readStore<ThreadPost[]>('posts', [])
+  const rawBody: unknown = await req.json()
+  const parsed = postCreateBodySchema.safeParse(rawBody)
+  if (!parsed.success) {
+    return fail('Invalid request body', 400, 'VALIDATION_ERROR', zodErrorDetails(parsed.error))
+  }
+
+  const body = parsed.data as PostCreateInput
+  const now = new Date().toISOString()
+  const posts = normalizePosts(readStore<ThreadPost[]>('posts', []))
 
   const newPost: ThreadPost = {
     id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
     status: 'new',
     contentType: body.contentType ?? 'informational',
     topic: body.topic ?? '',
@@ -37,6 +50,5 @@ export async function POST(req: NextRequest) {
 
   posts.push(newPost)
   writeStore('posts', posts)
-
-  return NextResponse.json(newPost, { status: 201 })
+  return ok(newPost, 201)
 }

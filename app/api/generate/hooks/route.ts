@@ -1,33 +1,53 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { readStore } from '@/lib/store'
+import { NextRequest } from 'next/server'
+import { fail, ok, zodErrorDetails } from '@/lib/api'
+import { normalizePosts } from '@/lib/entities'
+import { generateHookBodySchema, type GenerateHookInput } from '@/lib/schemas'
 import { generateJSON } from '@/lib/ai'
 import { buildHookGenerationPrompt } from '@/lib/prompts'
+import { readStore, writeStore } from '@/lib/store'
 import type { AffiliateProduct, HookAngle, StrategyConfig, ThreadPost } from '@/lib/types'
 
+const DEFAULT_STRATEGY: StrategyConfig = {
+  systemPromptBase: '',
+  hookFormulas: [],
+  optimalPostLength: 150,
+  hashtagStrategy: '본글 마지막 1개',
+  bestPostTimes: ['07:30', '20:00'],
+  replyCount: 3,
+  commentDelayMin: 20,
+  commentDelayMax: 90,
+}
+
 export async function POST(req: NextRequest) {
-  const { postId } = await req.json()
-
-  const posts = readStore<ThreadPost[]>('posts', [])
-  const post = posts.find((p) => p.id === postId)
-  if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 })
-
-  const strategy = readStore<StrategyConfig>('strategy', {} as StrategyConfig)
-
-  let product: AffiliateProduct | null = null
-  if (post.affiliateProductId) {
-    const products = readStore<AffiliateProduct[]>('affiliates', [])
-    product = products.find((p) => p.id === post.affiliateProductId) ?? null
+  const rawBody: unknown = await req.json()
+  const parsed = generateHookBodySchema.safeParse(rawBody)
+  if (!parsed.success) {
+    return fail('Invalid request body', 400, 'VALIDATION_ERROR', zodErrorDetails(parsed.error))
   }
 
-  const prompt = buildHookGenerationPrompt(product, post.topic, strategy)
-  const hooks = await generateJSON<HookAngle[]>(prompt)
+  const { postId } = parsed.data as GenerateHookInput
+  const posts = normalizePosts(readStore<ThreadPost[]>('posts', []))
+  const post = posts.find((item) => item.id === postId)
+  if (!post) return fail('Post not found', 404, 'NOT_FOUND')
 
-  // Save hooks to post
-  const updatedPosts = posts.map((p) =>
-    p.id === postId ? { ...p, hookAngles: hooks, status: 'hooks_ready' as const } : p
-  )
-  const { writeStore } = await import('@/lib/store')
-  writeStore('posts', updatedPosts)
+  const strategy = readStore<StrategyConfig>('strategy', DEFAULT_STRATEGY)
+  let product: AffiliateProduct | null = null
+  if (post.affiliateProductId) {
+    product = readStore<AffiliateProduct[]>('affiliates', []).find((item) => item.id === post.affiliateProductId) ?? null
+  }
 
-  return NextResponse.json({ hooks })
+  try {
+    const hooks = await generateJSON<HookAngle[]>(buildHookGenerationPrompt(product, post.topic, strategy))
+    const now = new Date().toISOString()
+
+    writeStore(
+      'posts',
+      posts.map((item) => (item.id === postId ? { ...item, hookAngles: hooks, status: 'hooks_ready', updatedAt: now } : item))
+    )
+
+    return ok({ hooks })
+  } catch (error) {
+    console.error('[generate/hooks] AI 생성 실패:', error)
+    return fail('AI 생성 실패. API 키를 확인하세요.', 500, 'AI_GENERATION_FAILED')
+  }
 }

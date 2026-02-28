@@ -1,110 +1,129 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import type { ThreadPost, PostStatus } from '@/lib/types'
+import type { ThreadPost } from '@/lib/types'
 
-const STATUS_LABELS: Record<PostStatus, string> = {
+const STATUS_LABEL: Record<string, string> = {
   new: '신규',
   hooks_ready: '후킹완료',
   draft: '초안완료',
   scheduled: '예약됨',
   published: '발행완료',
 }
-const STATUS_CLS: Record<PostStatus, string> = {
-  new: 'tag-new',
-  hooks_ready: 'tag-hooks',
-  draft: 'tag-draft',
-  scheduled: 'tag-scheduled',
-  published: 'tag-published',
-}
 
-function nextStep(post: ThreadPost): string {
-  switch (post.status) {
-    case 'new': return `/posts/${post.id}/hooks`
-    case 'hooks_ready': return `/posts/${post.id}/hooks`
-    case 'draft': return `/posts/${post.id}/draft`
-    case 'scheduled': return `/posts/${post.id}/publish`
-    case 'published': return `/posts/${post.id}/publish`
-  }
+const STATUS_COLOR: Record<string, string> = {
+  new: 'var(--muted)',
+  hooks_ready: 'var(--purple)',
+  draft: 'var(--mint)',
+  scheduled: 'var(--orange)',
+  published: 'var(--green)',
 }
 
 export default function PostsPage() {
   const [posts, setPosts] = useState<ThreadPost[]>([])
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [filter, setFilter] = useState<string>('all')
 
   useEffect(() => {
-    fetch('/api/posts').then((r) => r.json()).then(setPosts)
+    fetch('/api/posts').then((r) => r.json()).then((res) => setPosts(res.data ?? []))
   }, [])
 
-  const filtered = statusFilter === 'all' ? posts : posts.filter((p) => p.status === statusFilter)
+  const filtered = filter === 'all' ? posts : posts.filter((p) => p.status === filter)
 
-  async function deletePost(id: string) {
-    if (!confirm('삭제하시겠습니까?')) return
+  const handleDelete = async (id: string) => {
+    if (!confirm('이 포스트를 삭제하시겠습니까?')) return
     await fetch(`/api/posts/${id}`, { method: 'DELETE' })
     setPosts((prev) => prev.filter((p) => p.id !== id))
   }
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800 }}>포스트</h1>
-          <div style={{ fontSize: 11, color: 'var(--text-m)', marginTop: 4 }}>{posts.length}개 포스트</div>
-        </div>
-        <Link href="/posts/new" className="btn btn-primary">+ 새 포스트</Link>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>포스트 목록</h1>
+        <Link href="/posts/new">
+          <button className="btn-primary">+ 새 포스트</button>
+        </Link>
       </div>
 
-      {/* Status filter */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         {['all', 'new', 'hooks_ready', 'draft', 'scheduled', 'published'].map((s) => (
           <button
             key={s}
-            className="btn btn-ghost btn-sm"
-            style={statusFilter === s ? { borderColor: 'var(--primary)', color: 'var(--primary)' } : {}}
-            onClick={() => setStatusFilter(s)}
+            onClick={() => setFilter(s)}
+            style={{
+              padding: '0.35rem 0.85rem',
+              borderRadius: '999px',
+              border: '1px solid',
+              borderColor: filter === s ? 'var(--primary)' : 'var(--border)',
+              background: filter === s ? 'var(--primary)' : 'transparent',
+              color: filter === s ? '#000' : 'var(--text-secondary)',
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+            }}
           >
-            {s === 'all' ? '전체' : STATUS_LABELS[s as PostStatus]}
-            {' '}({s === 'all' ? posts.length : posts.filter((p) => p.status === s).length})
+            {s === 'all' ? '전체' : STATUS_LABEL[s]}
           </button>
         ))}
       </div>
 
       {filtered.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-m)' }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>✏️</div>
-          <div>포스트가 없습니다</div>
-          <Link href="/posts/new" className="btn btn-primary" style={{ marginTop: 16 }}>+ 첫 포스트 작성</Link>
+        <div className="card" style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '3rem' }}>
+          포스트가 없습니다.{' '}
+          <Link href="/posts/new" style={{ color: 'var(--primary)' }}>새 포스트 만들기 →</Link>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {filtered.map((p) => (
-            <div key={p.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {filtered.map((post) => (
+            <div key={post.id} className="card" style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
               <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <span className={`tag ${STATUS_CLS[p.status]}`}>{STATUS_LABELS[p.status]}</span>
-                  <span className="tag" style={{ background: 'rgba(96,165,250,0.1)', color: 'var(--blue)' }}>
-                    {p.contentType === 'affiliate' ? '어필리에이트' : p.contentType === 'informational' ? '정보성' : '개인'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.35rem' }}>
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      padding: '0.2rem 0.6rem',
+                      borderRadius: '999px',
+                      background: STATUS_COLOR[post.status] + '22',
+                      color: STATUS_COLOR[post.status],
+                      fontWeight: 600,
+                    }}
+                  >
+                    {STATUS_LABEL[post.status]}
                   </span>
-                  {p.notes?.includes('[자동생성]') && (
-                    <span className="tag" style={{ background: 'rgba(52,211,153,0.1)', color: 'var(--mint)' }}>자동</span>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{post.account}</span>
+                  {post.scheduledAt && (
+                    <span style={{ fontSize: '0.78rem', color: 'var(--orange)' }}>
+                      {new Date(post.scheduledAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   )}
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 4 }}>{p.topic}</div>
-                {p.thread.main && (
-                  <div style={{ fontSize: 11, color: 'var(--text-m)' }}>
-                    {p.thread.main.slice(0, 80)}{p.thread.main.length > 80 ? '…' : ''}
+                <div style={{ fontWeight: 500 }}>{post.topic}</div>
+                {post.thread?.main && (
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '500px' }}>
+                    {post.thread.main}
                   </div>
                 )}
-                <div style={{ fontSize: 10, color: 'var(--text-m)', marginTop: 4 }}>
-                  {new Date(p.createdAt).toLocaleDateString('ko-KR')} · {p.account}
-                  {p.scheduledAt && ` · 예약: ${new Date(p.scheduledAt).toLocaleString('ko-KR')}`}
-                </div>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <Link href={nextStep(p)} className="btn btn-ghost btn-sm">
-                  {p.status === 'published' ? '보기' : '계속 →'}
-                </Link>
-                <button className="btn btn-danger btn-sm" onClick={() => deletePost(p.id)}>삭제</button>
+              <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                {post.status === 'new' && (
+                  <Link href={`/posts/${post.id}/hooks`}><button className="btn-secondary" style={{ fontSize: '0.8rem' }}>후킹 →</button></Link>
+                )}
+                {post.status === 'hooks_ready' && (
+                  <Link href={`/posts/${post.id}/draft`}><button className="btn-secondary" style={{ fontSize: '0.8rem' }}>대본 →</button></Link>
+                )}
+                {post.status === 'draft' && (
+                  <Link href={`/posts/${post.id}/schedule`}><button className="btn-secondary" style={{ fontSize: '0.8rem' }}>예약 →</button></Link>
+                )}
+                {post.status === 'scheduled' && (
+                  <Link href={`/posts/${post.id}/publish`}><button className="btn-primary" style={{ fontSize: '0.8rem' }}>발행 →</button></Link>
+                )}
+                {post.status === 'published' && (
+                  <Link href={`/posts/${post.id}/publish`}><button className="btn-secondary" style={{ fontSize: '0.8rem' }}>완료 →</button></Link>
+                )}
+                <button
+                  onClick={() => handleDelete(post.id)}
+                  style={{ padding: '0.35rem 0.7rem', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}
+                >
+                  삭제
+                </button>
               </div>
             </div>
           ))}

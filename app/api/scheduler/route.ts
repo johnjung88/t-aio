@@ -1,45 +1,49 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getStatus, startJob, stopJob, syncWithAccounts } from '@/lib/scheduler'
+import { NextRequest } from 'next/server'
+import { fail, ok, zodErrorDetails } from '@/lib/api'
+import { normalizeAccounts } from '@/lib/entities'
+import { schedulerBodySchema, type SchedulerActionInput } from '@/lib/schemas'
+import { getStatus, startJob, stopJob } from '@/lib/scheduler'
 import { readStore, writeStore } from '@/lib/store'
 import type { Account } from '@/lib/types'
 
 export async function GET() {
-  return NextResponse.json(getStatus())
+  const accounts = normalizeAccounts(readStore<Account[]>('accounts', []))
+  writeStore('accounts', accounts)
+
+  const status = getStatus()
+  const runningIds = new Set(status.jobs.map((job) => job.accountId))
+  const jobs = accounts.map((account) => ({
+    accountId: account.id,
+    username: account.username,
+    autoGenEnabled: account.autoGenEnabled,
+    autoGenTime: account.autoGenTime,
+    running: runningIds.has(account.id),
+    todayPostCount: account.todayPostCount,
+    todayPostDate: account.todayPostDate,
+  }))
+
+  return ok({ jobs })
 }
 
 export async function POST(req: NextRequest) {
-  const { action, accountId, time } = await req.json()
-
-  switch (action) {
-    case 'start':
-      startJob(accountId, time ?? '08:00')
-      return NextResponse.json({ ok: true, message: `Started job for ${accountId}` })
-
-    case 'stop':
-      stopJob(accountId)
-      return NextResponse.json({ ok: true, message: `Stopped job for ${accountId}` })
-
-    case 'toggle': {
-      const accounts = readStore<Account[]>('accounts', [])
-      const idx = accounts.findIndex((a) => a.id === accountId)
-      if (idx === -1) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
-
-      const enabled = !accounts[idx].autoGenEnabled
-      accounts[idx].autoGenEnabled = enabled
-      if (time) accounts[idx].autoGenTime = time
-      writeStore('accounts', accounts)
-
-      if (enabled) startJob(accountId, accounts[idx].autoGenTime)
-      else stopJob(accountId)
-
-      return NextResponse.json({ ok: true, enabled })
-    }
-
-    case 'sync':
-      syncWithAccounts()
-      return NextResponse.json({ ok: true })
-
-    default:
-      return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+  const rawBody: unknown = await req.json()
+  const parsed = schedulerBodySchema.safeParse(rawBody)
+  if (!parsed.success) {
+    return fail('Invalid request body', 400, 'VALIDATION_ERROR', zodErrorDetails(parsed.error))
   }
+
+  const { action, accountId, time } = parsed.data as SchedulerActionInput
+  if (action === 'start') {
+    const accounts = normalizeAccounts(readStore<Account[]>('accounts', []))
+    const account = accounts.find((item) => item.id === accountId)
+    startJob(accountId, time ?? account?.autoGenTime ?? '08:00')
+    return ok({ action: 'started', accountId })
+  }
+
+  if (action === 'stop') {
+    stopJob(accountId)
+    return ok({ action: 'stopped', accountId })
+  }
+
+  return fail('Invalid action', 400, 'INVALID_ACTION')
 }

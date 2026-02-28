@@ -1,22 +1,15 @@
-// T-AIO — JSON File Store Helpers (server-side only)
 import fs from 'fs'
 import path from 'path'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
 
 function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true })
-  }
-}
-
-function filePath(name: string) {
-  return path.join(DATA_DIR, `${name}.json`)
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
 }
 
 export function readStore<T>(name: string, defaultValue: T): T {
   ensureDataDir()
-  const fp = filePath(name)
+  const fp = path.join(DATA_DIR, `${name}.json`)
   if (!fs.existsSync(fp)) {
     fs.writeFileSync(fp, JSON.stringify(defaultValue, null, 2))
     return defaultValue
@@ -30,5 +23,5 @@ export function readStore<T>(name: string, defaultValue: T): T {
 
 export function writeStore<T>(name: string, data: T): void {
   ensureDataDir()
-  fs.writeFileSync(filePath(name), JSON.stringify(data, null, 2))
+  fs.writeFileSync(path.join(DATA_DIR, `${name}.json`), JSON.stringify(data, null, 2))
 }

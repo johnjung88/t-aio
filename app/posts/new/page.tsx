@@ -1,167 +1,167 @@
 'use client'
-import { useEffect, useState, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import type { AffiliateProduct, Account } from '@/lib/types'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import type { AffiliateProduct, Account, ContentType } from '@/lib/types'
 
-function NewPostForm() {
+export default function NewPostPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const preselectedProductId = searchParams.get('productId')
-
-  const [contentType, setContentType] = useState<'affiliate' | 'informational' | 'personal'>('affiliate')
+  const [contentType, setContentType] = useState<ContentType>('affiliate')
   const [products, setProducts] = useState<AffiliateProduct[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
-  const [selectedProductId, setSelectedProductId] = useState(preselectedProductId ?? '')
-  const [selectedAccount, setSelectedAccount] = useState('default')
-  const [topic, setTopic] = useState('')
-  const [keywords, setKeywords] = useState('')
-  const [notes, setNotes] = useState('')
+  const [suggested, setSuggested] = useState<AffiliateProduct | null>(null)
+  const [form, setForm] = useState({
+    topic: '', affiliateProductId: '', account: '', replyCount: 3, keywords: '',
+  })
   const [saving, setSaving] = useState(false)
-  const [suggesting, setSuggesting] = useState(false)
 
   useEffect(() => {
-    fetch('/api/products').then((r) => r.json()).then(setProducts)
-    fetch('/api/accounts').then((r) => r.json()).then((accs) => {
+    Promise.all([
+      fetch('/api/products').then((r) => r.json()),
+      fetch('/api/accounts').then((r) => r.json()),
+      fetch('/api/products/suggest').then((r) => r.json()),
+    ]).then(([prodsRes, accsRes, suggRes]) => {
+      const prods = prodsRes.data ?? []
+      const accs = accsRes.data ?? []
+      const sugg = suggRes.data ?? suggRes
+      setProducts(prods)
       setAccounts(accs)
-      if (accs.length > 0) setSelectedAccount(accs[0].id)
+      if (sugg?.product) {
+        setSuggested(sugg.product)
+        setForm((f) => ({ ...f, affiliateProductId: sugg.product.id }))
+      }
+      if (accs.length > 0) setForm((f) => ({ ...f, account: accs[0].username }))
     })
   }, [])
 
-  async function suggestProduct() {
-    setSuggesting(true)
-    try {
-      const res = await fetch(`/api/products/suggest?accountId=${selectedAccount}`)
-      const data = await res.json()
-      if (data.product) setSelectedProductId(data.product.id)
-    } finally {
-      setSuggesting(false)
-    }
-  }
-
-  async function handleCreate() {
-    const topicValue = contentType === 'affiliate'
-      ? products.find((p) => p.id === selectedProductId)?.name ?? ''
-      : topic
-
-    if (!topicValue) return alert('주제 또는 제품을 선택하세요')
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     setSaving(true)
-
-    try {
-      const res = await fetch('/api/posts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contentType,
-          topic: topicValue,
-          keywords: keywords.split(',').map((k) => k.trim()).filter(Boolean),
-          account: selectedAccount,
-          affiliateProductId: contentType === 'affiliate' ? selectedProductId : undefined,
-          notes,
-        }),
-      })
-      const post = await res.json()
-      router.push(`/posts/${post.id}/hooks`)
-    } finally {
-      setSaving(false)
+    const body: Record<string, unknown> = {
+      contentType,
+      topic: form.topic,
+      account: form.account,
+      keywords: form.keywords.split(',').map((k) => k.trim()).filter(Boolean),
     }
+    if (contentType === 'affiliate' && form.affiliateProductId) {
+      body.affiliateProductId = form.affiliateProductId
+      const prod = products.find((p) => p.id === form.affiliateProductId)
+      if (prod && !form.topic) body.topic = prod.name
+    }
+    const r = await fetch('/api/posts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const res = await r.json()
+    const newPost = res.data ?? res
+    router.push(`/posts/${newPost.id}/hooks`)
   }
 
   return (
-    <div style={{ maxWidth: 600 }}>
-      <h1 style={{ fontSize: 20, fontWeight: 800, marginBottom: 24 }}>새 포스트 시작</h1>
+    <div style={{ maxWidth: '600px' }}>
+      <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1.5rem' }}>새 포스트</h1>
 
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        {/* Content type toggle */}
-        <div>
-          <div className="section-title">콘텐츠 유형</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {([['affiliate', '어필리에이트'], ['informational', '정보성'], ['personal', '개인']] as const).map(([val, label]) => (
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {/* 콘텐츠 타입 */}
+        <div className="card">
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>콘텐츠 유형</div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {(['affiliate', 'informational', 'personal'] as ContentType[]).map((t) => (
               <button
-                key={val}
-                className="btn btn-ghost"
-                style={contentType === val ? { borderColor: 'var(--primary)', color: 'var(--primary)' } : {}}
-                onClick={() => setContentType(val)}
+                key={t}
+                type="button"
+                onClick={() => setContentType(t)}
+                style={{
+                  flex: 1, padding: '0.6rem', borderRadius: '8px', border: '1px solid',
+                  borderColor: contentType === t ? 'var(--primary)' : 'var(--border)',
+                  background: contentType === t ? 'var(--primary)22' : 'transparent',
+                  color: contentType === t ? 'var(--primary)' : 'var(--text-secondary)',
+                  cursor: 'pointer', fontSize: '0.85rem', fontWeight: contentType === t ? 600 : 400,
+                }}
               >
-                {label}
+                {t === 'affiliate' ? '어필리에이트' : t === 'informational' ? '정보성' : '개인'}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Affiliate product selection */}
+        {/* 어필리에이트 제품 선택 */}
         {contentType === 'affiliate' && (
-          <div>
-            <div className="section-title">어필리에이트 제품 선택</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <select
-                className="input"
-                value={selectedProductId}
-                onChange={(e) => setSelectedProductId(e.target.value)}
-              >
-                <option value="">제품 선택...</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.category})
-                  </option>
-                ))}
-              </select>
-              <button className="btn btn-ghost" onClick={suggestProduct} disabled={suggesting}>
-                {suggesting ? '추천 중...' : '자동추천'}
-              </button>
-            </div>
-            {selectedProductId && (
-              <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(0,212,255,0.06)', borderRadius: 8, fontSize: 11, color: 'var(--text-s)' }}>
-                선택됨: {products.find((p) => p.id === selectedProductId)?.name}
+          <div className="card">
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>제품 선택</div>
+            {suggested && (
+              <div style={{ padding: '0.6rem 0.75rem', background: 'var(--mint)11', border: '1px solid var(--mint)44', borderRadius: '8px', fontSize: '0.82rem', marginBottom: '0.75rem', color: 'var(--mint)' }}>
+                ✦ AI 추천: {suggested.name} ({suggested.category})
               </div>
             )}
+            <select
+              value={form.affiliateProductId}
+              onChange={(e) => setForm({ ...form, affiliateProductId: e.target.value })}
+              style={{ width: '100%', padding: '0.6rem', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }}
+            >
+              <option value="">-- 제품 선택 --</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>{p.name} ({p.platform})</option>
+              ))}
+            </select>
           </div>
         )}
 
-        {/* Topic (non-affiliate) */}
-        {contentType !== 'affiliate' && (
-          <div>
-            <div className="section-title">주제 입력</div>
-            <input className="input" placeholder="예: 재택근무 생산성 높이는 방법 5가지" value={topic} onChange={(e) => setTopic(e.target.value)} />
-          </div>
-        )}
+        {/* 주제 */}
+        <div className="card">
+          <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.3rem' }}>
+            {contentType === 'affiliate' ? '추가 포인트 (선택)' : '주제 *'}
+          </label>
+          <input
+            value={form.topic}
+            onChange={(e) => setForm({ ...form, topic: e.target.value })}
+            required={contentType !== 'affiliate'}
+            placeholder={contentType === 'affiliate' ? '강조할 포인트... (비워두면 제품명 사용)' : '예: 직장인 점심 도시락 추천 5가지'}
+            style={{ width: '100%', padding: '0.6rem 0.75rem', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }}
+          />
+        </div>
 
-        {/* Account */}
-        <div>
-          <div className="section-title">계정 선택</div>
-          <select className="input" value={selectedAccount} onChange={(e) => setSelectedAccount(e.target.value)}>
+        {/* 계정 선택 */}
+        <div className="card">
+          <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.3rem' }}>발행 계정</label>
+          <select
+            value={form.account}
+            onChange={(e) => setForm({ ...form, account: e.target.value })}
+            style={{ width: '100%', padding: '0.6rem', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }}
+          >
+            {accounts.length === 0 && <option value="">계정 없음</option>}
             {accounts.map((a) => (
-              <option key={a.id} value={a.id}>{a.displayName} ({a.niche})</option>
+              <option key={a.id} value={a.username}>{a.displayName} (@{a.username})</option>
             ))}
           </select>
         </div>
 
-        {/* Keywords */}
-        <div>
-          <div className="section-title">키워드 (선택사항, 쉼표 구분)</div>
-          <input className="input" placeholder="생산성, 재택근무, 도구" value={keywords} onChange={(e) => setKeywords(e.target.value)} />
+        {/* 댓글 수 */}
+        <div className="card">
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>댓글 구성</div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {[0, 1, 2, 3].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setForm({ ...form, replyCount: n })}
+                style={{
+                  flex: 1, padding: '0.5rem', borderRadius: '8px', border: '1px solid',
+                  borderColor: form.replyCount === n ? 'var(--primary)' : 'var(--border)',
+                  background: form.replyCount === n ? 'var(--primary)22' : 'transparent',
+                  color: form.replyCount === n ? 'var(--primary)' : 'var(--text-secondary)',
+                  cursor: 'pointer', fontSize: '0.82rem',
+                }}
+              >
+                {n === 0 ? '본글만' : `본글+${n}`}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Notes */}
-        <div>
-          <div className="section-title">메모 (선택사항)</div>
-          <textarea className="input" placeholder="포스팅 방향이나 강조할 점을 메모하세요" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
-        </div>
-
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button className="btn btn-ghost" onClick={() => router.back()}>취소</button>
-          <button className="btn btn-primary" onClick={handleCreate} disabled={saving}>
-            {saving ? '생성 중...' : '후킹 생성 →'}
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+          <button type="button" onClick={() => router.back()} className="btn-secondary">취소</button>
+          <button type="submit" disabled={saving} className="btn-primary">
+            {saving ? '생성중...' : '후킹 생성 →'}
           </button>
         </div>
-      </div>
+      </form>
     </div>
-  )
-}
-
-export default function NewPostPage() {
-  return (
-    <Suspense>
-      <NewPostForm />
-    </Suspense>
   )
 }

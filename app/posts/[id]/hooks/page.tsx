@@ -1,157 +1,183 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
-import type { ThreadPost, HookAngle } from '@/lib/types'
 
-const STRENGTH_STARS = (n: number) => '★'.repeat(n) + '☆'.repeat(5 - n)
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import type { HookAngle, HookType, ThreadPost } from '@/lib/types'
 
-const HOOK_TYPE_LABELS: Record<HookAngle['type'], string> = {
-  pain: '고통포인트',
-  curiosity: '궁금증 유발',
-  number: '숫자 후킹',
-  empathy: '공감',
-  comparison: '비교',
+const HOOK_TYPE_LABEL: Record<HookType, string> = {
+  empathy_story: '공감형썰',
+  price_shock: '충격가격비교',
+  comparison: '비교분석',
+  social_proof: '사회적증거',
+  reverse: '역발상',
 }
 
-export default function HooksPage() {
-  const { id } = useParams<{ id: string }>()
+function renderStars(strength: HookAngle['strength']) {
+  return '★'.repeat(strength) + '☆'.repeat(5 - strength)
+}
+
+function isThreadPost(value: unknown): value is ThreadPost {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      'id' in value &&
+      'thread' in value
+  )
+}
+
+export default function HooksPage({ params }: { params: { id: string } }) {
   const router = useRouter()
   const [post, setPost] = useState<ThreadPost | null>(null)
+  const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [selected, setSelected] = useState<string>('')
-  const [customHook, setCustomHook] = useState('')
   const [saving, setSaving] = useState(false)
+  const [directHook, setDirectHook] = useState('')
+  const [message, setMessage] = useState('')
 
   useEffect(() => {
-    fetch(`/api/posts/${id}`).then((r) => r.json()).then((p: ThreadPost) => {
-      setPost(p)
-      if (p.selectedHook) setSelected(p.selectedHook)
-    })
-  }, [id])
+    setLoading(true)
+    fetch('/api/posts')
+      .then((r) => r.json())
+      .then((res) => {
+        const posts: ThreadPost[] = res.data ?? []
+        const found = posts.find((p) => p.id === params.id) ?? null
+        setPost(found)
+        setDirectHook(found?.selectedHook ?? '')
+      })
+      .catch(() => setMessage('포스트를 불러오지 못했습니다.'))
+      .finally(() => setLoading(false))
+  }, [params.id])
 
-  async function generateHooks() {
+  const selectedHook = useMemo(() => {
+    if (!post) return ''
+    return post.selectedHook ?? directHook.trim()
+  }, [post, directHook])
+
+  const generateHooks = async () => {
+    if (!post) return
     setGenerating(true)
+    setMessage('')
+
     try {
-      const res = await fetch('/api/generate/hooks', {
+      const response = await fetch('/api/generate/hooks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId: id }),
+        body: JSON.stringify({ postId: post.id }),
       })
-      const data = await res.json()
-      setPost((prev) => prev ? { ...prev, hookAngles: data.hooks, status: 'hooks_ready' } : prev)
-    } catch (err) {
-      alert('AI 생성 실패. API 키를 확인하세요.')
-      console.error(err)
+      const res = await response.json()
+      if (!response.ok) {
+        setMessage(res.error?.message ?? res.error ?? '후킹 생성에 실패했습니다.')
+        return
+      }
+
+      const hooks: HookAngle[] = res.data?.hooks ?? []
+      setPost({ ...post, hookAngles: hooks, status: 'hooks_ready' })
+      if (hooks.length === 0) setMessage('생성된 후킹이 없습니다.')
+    } catch {
+      setMessage('후킹 생성 중 오류가 발생했습니다.')
     } finally {
       setGenerating(false)
     }
   }
 
-  async function handleNext() {
-    const hook = customHook.trim() || selected
-    if (!hook) return alert('후킹 각도를 선택하거나 입력하세요')
+  const saveSelectedHook = async (hook: string) => {
+    if (!post) return
+
+    const trimmed = hook.trim()
+    if (!trimmed) {
+      setMessage('후킹 내용을 입력해 주세요.')
+      return
+    }
+
     setSaving(true)
+    setMessage('')
     try {
-      await fetch(`/api/posts/${id}`, {
+      const response = await fetch(`/api/posts/${post.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ selectedHook: hook }),
+        body: JSON.stringify({ selectedHook: trimmed, status: 'hooks_ready' }),
       })
-      router.push(`/posts/${id}/draft`)
+      const patchRes = await response.json()
+      if (!response.ok) {
+        setMessage('후킹 저장에 실패했습니다.')
+        return
+      }
+      const nextPost = patchRes.data ?? patchRes
+      setPost(nextPost)
+      setDirectHook(nextPost.selectedHook ?? trimmed)
+      setMessage('선택한 후킹이 저장되었습니다.')
+    } catch {
+      setMessage('후킹 저장 중 오류가 발생했습니다.')
     } finally {
       setSaving(false)
     }
   }
 
-  if (!post) return <div style={{ color: 'var(--text-m)' }}>로딩 중...</div>
+  if (loading) {
+    return <div className="card">불러오는 중...</div>
+  }
+
+  if (!post) {
+    return <div className="card">포스트를 찾을 수 없습니다.</div>
+  }
 
   return (
-    <div style={{ maxWidth: 700 }}>
-      {/* Breadcrumb */}
-      <div style={{ fontSize: 11, color: 'var(--text-m)', marginBottom: 8 }}>
-        포스트 &gt; {post.topic} &gt; <span style={{ color: 'var(--primary)' }}>후킹 선택</span>
+    <div style={{ maxWidth: '900px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div className="card">
+        <h1 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '0.5rem' }}>후킹 각도 선택</h1>
+        <div style={{ color: 'var(--text-s)' }}>{post.topic || '주제 없음'}</div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 800 }}>Step 2 — 후킹 각도 선택</h1>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ padding: '4px 10px', background: 'rgba(0,212,255,0.08)', borderRadius: 20, fontSize: 11, color: 'var(--primary)' }}>
-            2 / 5
-          </div>
-        </div>
-      </div>
-
-      {/* Topic info */}
-      <div className="card" style={{ marginBottom: 16, padding: '12px 16px' }}>
-        <div style={{ fontSize: 11, color: 'var(--text-m)' }}>주제</div>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>{post.topic}</div>
-      </div>
-
-      {/* Generate button */}
-      {(!post.hookAngles || post.hookAngles.length === 0) && (
-        <div className="card" style={{ textAlign: 'center', padding: 32, marginBottom: 16 }}>
-          <div style={{ fontSize: 28, marginBottom: 12 }}>🪝</div>
-          <div style={{ fontSize: 13, color: 'var(--text-s)', marginBottom: 16 }}>
-            AI가 제품/주제를 분석해 5가지 후킹 각도를 생성합니다
-          </div>
-          <button className="btn btn-primary" onClick={generateHooks} disabled={generating}>
-            {generating ? '생성 중...' : 'AI 후킹 생성'}
-          </button>
-        </div>
-      )}
-
-      {post.hookAngles && post.hookAngles.length > 0 && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div className="section-title" style={{ marginBottom: 0 }}>후킹 각도 선택</div>
-            <button className="btn btn-ghost btn-sm" onClick={generateHooks} disabled={generating}>
-              {generating ? '재생성 중...' : '재생성'}
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-            {post.hookAngles.map((h, i) => (
-              <div
-                key={i}
-                className="card"
-                style={{
-                  cursor: 'pointer',
-                  borderColor: selected === h.angle ? 'var(--primary)' : 'var(--border)',
-                  background: selected === h.angle ? 'rgba(0,212,255,0.06)' : 'var(--bg-card)',
-                  padding: '14px 16px',
-                }}
-                onClick={() => { setSelected(h.angle); setCustomHook('') }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <span className="tag">{HOOK_TYPE_LABELS[h.type]}</span>
-                  <span style={{ fontSize: 11, color: 'var(--gold-l)' }}>{STRENGTH_STARS(h.strength)}</span>
-                  {selected === h.angle && <span style={{ fontSize: 11, color: 'var(--primary)' }}>✓ 선택됨</span>}
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text)' }}>{h.angle}</div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* Custom hook input */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div className="section-title">직접 입력 (선택사항)</div>
-        <textarea
-          className="input"
-          placeholder="원하는 후킹 각도를 직접 입력하세요..."
-          value={customHook}
-          onChange={(e) => { setCustomHook(e.target.value); if (e.target.value) setSelected('') }}
-          rows={2}
-        />
-      </div>
-
-      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-        <button className="btn btn-ghost" onClick={() => router.back()}>이전</button>
-        <button className="btn btn-primary" onClick={handleNext} disabled={saving || (!selected && !customHook.trim())}>
-          {saving ? '저장 중...' : '대본 생성 →'}
+      <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div style={{ color: 'var(--text-s)' }}>AI로 후킹 각도를 자동 생성합니다.</div>
+        <button className="btn btn-primary" onClick={generateHooks} disabled={generating || saving}>
+          {generating ? '생성 중...' : '후킹 생성'}
         </button>
       </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
+        {(post.hookAngles ?? []).map((angle) => (
+          <div key={`${angle.type}-${angle.angle}`} className="card" style={{ padding: '14px 16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+              <span className="tag">{HOOK_TYPE_LABEL[angle.type]}</span>
+              <span style={{ color: 'var(--orange)', fontSize: '0.78rem' }}>{renderStars(angle.strength)}</span>
+            </div>
+            <div style={{ fontSize: '0.9rem', lineHeight: 1.55, marginBottom: '0.8rem', minHeight: '68px' }}>{angle.angle}</div>
+            <button className="btn btn-ghost btn-sm" onClick={() => saveSelectedHook(angle.angle)} disabled={saving || generating}>
+              선택
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="card">
+        <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>직접 입력</div>
+        <textarea
+          className="input"
+          value={directHook}
+          onChange={(e) => setDirectHook(e.target.value)}
+          placeholder="직접 사용할 후킹 문구를 입력하세요"
+          rows={4}
+        />
+        <div style={{ marginTop: '0.7rem', display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button className="btn btn-ghost" onClick={() => saveSelectedHook(directHook)} disabled={saving || generating}>
+            {saving ? '저장 중...' : '직접 입력으로 진행'}
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => router.push(`/posts/${post.id}/draft`)}
+            disabled={!selectedHook || saving || generating}
+          >
+            다음: 대본 작성 →
+          </button>
+        </div>
+      </div>
+
+      {message && (
+        <div className="card" style={{ color: message.includes('실패') || message.includes('오류') ? 'var(--red)' : 'var(--mint)' }}>
+          {message}
+        </div>
+      )}
     </div>
   )
 }

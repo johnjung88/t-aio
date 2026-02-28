@@ -4,7 +4,7 @@ import Sidebar from '@/components/Sidebar'
 
 export const metadata: Metadata = {
   title: 'T-AIO — Threads All-In-One',
-  description: 'Threads 콘텐츠 자동화 도구',
+  description: 'Threads 어필리에이트 마케팅 자동화',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

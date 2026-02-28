@@ -1,16 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { readStore } from '@/lib/store'
+import { NextRequest } from 'next/server'
+import { fail, ok } from '@/lib/api'
+import { normalizeAccounts } from '@/lib/entities'
+import { parseProductSuggestQuery } from '@/lib/schemas'
+import { readStore, writeStore } from '@/lib/store'
 import { selectProductForAccount } from '@/lib/product-selector'
 import type { Account } from '@/lib/types'
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
-  const accountId = searchParams.get('accountId') ?? 'default'
+  const query = parseProductSuggestQuery({
+    accountId: new URL(req.url).searchParams.get('accountId'),
+  })
 
-  const accounts = readStore<Account[]>('accounts', [])
-  const account = accounts.find((a) => a.id === accountId)
-  if (!account) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+  const accounts = normalizeAccounts(readStore<Account[]>('accounts', []))
+  writeStore('accounts', accounts)
 
-  const product = selectProductForAccount(account)
-  return NextResponse.json({ product })
+  const account = accounts.find((item) => item.id === query.accountId)
+  if (!account) return fail('Account not found', 404, 'NOT_FOUND')
+
+  return ok({ product: selectProductForAccount(account) })
 }
