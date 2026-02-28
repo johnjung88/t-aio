@@ -1,0 +1,136 @@
+/* T-AIO — Design System (AIO tokens) */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0F1729;
+  --bg-card: rgba(255, 255, 255, 0.035);
+  --bg-card-h: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.07);
+  --border-glow: rgba(0, 212, 255, 0.25);
+  --primary: #00D4FF;
+  --primary-l: #33DDFF;
+  --gold: #00C896;
+  --gold-l: #33D9AA;
+  --mint: #34D399;
+  --mint-l: #6EE7B7;
+  --red: #F87171;
+  --orange: #FB923C;
+  --blue: #60A5FA;
+  --text: #F1F5F9;
+  --text-s: #94A3B8;
+  --text-m: #475569;
+  --navy: #1E2B4A;
+  --sidebar-w: 220px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  min-height: 100vh;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* Card */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  transition: border-color 0.2s;
+}
+.card:hover { border-color: rgba(255,255,255,0.12); }
+.card-glow { border-color: var(--border-glow) !important; }
+
+/* Tag / badges */
+.tag {
+  font-size: 9px; padding: 1px 6px; border-radius: 8px;
+  background: rgba(0,212,255,0.15); color: var(--primary-l);
+  font-weight: 700; letter-spacing: 0.05em; white-space: nowrap;
+}
+.tag-new      { background: rgba(148,163,184,0.15); color: var(--text-s); }
+.tag-hooks    { background: rgba(251,146,60,0.15);  color: var(--orange); }
+.tag-draft    { background: rgba(96,165,250,0.15);  color: var(--blue); }
+.tag-scheduled{ background: rgba(0,200,150,0.15);   color: var(--gold-l); }
+.tag-published{ background: rgba(52,211,153,0.15);  color: var(--mint); }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 8px;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer; border: none;
+  transition: all 0.15s; text-decoration: none; white-space: nowrap;
+}
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary  { background: var(--primary); color: #000; }
+.btn-primary:hover:not(:disabled) { background: var(--primary-l); }
+.btn-ghost    { background: var(--bg-card); color: var(--text-s); border: 1px solid var(--border); }
+.btn-ghost:hover:not(:disabled) { background: var(--bg-card-h); color: var(--text); }
+.btn-danger   { background: rgba(248,113,113,0.15); color: var(--red); border: 1px solid rgba(248,113,113,0.2); }
+.btn-danger:hover:not(:disabled) { background: rgba(248,113,113,0.25); }
+.btn-sm { padding: 4px 10px; font-size: 11px; }
+
+/* Inputs */
+.input {
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px;
+  color: var(--text); font-size: 13px; width: 100%;
+  outline: none; transition: border-color 0.15s;
+}
+.input:focus { border-color: var(--primary); }
+.input::placeholder { color: var(--text-m); }
+textarea.input { resize: vertical; min-height: 80px; font-family: inherit; }
+select.input   { cursor: pointer; }
+
+/* Section title */
+.section-title {
+  font-size: 10px; font-weight: 700; color: var(--text-m);
+  letter-spacing: 0.1em; text-transform: uppercase;
+  margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
+}
+
+/* Char counter colors */
+.char-ok   { color: var(--text-m); }
+.char-warn { color: var(--orange); }
+.char-over { color: var(--red); }
+
+/* Pulse dot */
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.8); }
+}
+.pulse {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--mint); animation: pulse 2s infinite;
+  flex-shrink: 0; display: inline-block;
+}
+
+/* Background orbs */
+.bg-orb {
+  position: fixed; pointer-events: none; z-index: 0;
+  border-radius: 50%; filter: blur(80px); opacity: 0.4;
+}
+.orb1 {
+  width: 500px; height: 500px; top: -150px; left: -100px;
+  background: radial-gradient(circle, rgba(0,212,255,0.12), transparent 70%);
+}
+.orb2 {
+  width: 400px; height: 400px; bottom: -100px; right: -80px;
+  background: radial-gradient(circle, rgba(0,200,150,0.1), transparent 70%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
