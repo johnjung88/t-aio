@@ -13,7 +13,6 @@ export async function GET(req: NextRequest) {
   })
 
   const normalized = normalizePosts(readStore<ThreadPost[]>('posts', []))
-  writeStore('posts', normalized)
 
   let posts = normalized
   if (query.status) posts = posts.filter((post) => post.status === query.status)

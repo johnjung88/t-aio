@@ -127,7 +127,7 @@ export default function NewPostPage() {
           >
             {accounts.length === 0 && <option value="">계정 없음</option>}
             {accounts.map((a) => (
-              <option key={a.id} value={a.username}>{a.displayName} (@{a.username})</option>
+              <option key={a.id} value={a.id}>{a.displayName} (@{a.username})</option>
             ))}
           </select>
         </div>

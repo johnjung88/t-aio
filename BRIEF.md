@@ -193,7 +193,7 @@ interface ThreadPost {
 }
 
 interface HookAngle {
-  type: 'pain'|'curiosity'|'number'|'empathy'|'comparison';
+  type: 'empathy_story'|'price_shock'|'comparison'|'social_proof'|'reverse';
   label: string; angle: string; strength: 1|2|3|4|5;
 }
 

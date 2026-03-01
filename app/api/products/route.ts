@@ -7,7 +7,6 @@ import type { AffiliateProduct } from '@/lib/types'
 
 export async function GET() {
   const products = normalizeProducts(readStore<AffiliateProduct[]>('affiliates', []))
-  writeStore('affiliates', products)
   products.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
   return ok(products)
 }

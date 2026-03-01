@@ -7,7 +7,6 @@ import type { Account } from '@/lib/types'
 
 export async function GET() {
   const accounts = normalizeAccounts(readStore<Account[]>('accounts', []))
-  writeStore('accounts', accounts)
   return ok(accounts)
 }
 

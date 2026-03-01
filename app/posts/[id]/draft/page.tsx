@@ -41,11 +41,11 @@ export default function DraftPage({ params }: { params: { id: string } }) {
   const visibleTabs = useMemo(() => {
     if (!post) return ['main'] as ThreadKey[]
     const tabs: ThreadKey[] = ['main']
-    if (thread.reply1 !== undefined && thread.reply1 !== '') tabs.push('reply1')
-    if (thread.reply2 !== undefined && thread.reply2 !== '') tabs.push('reply2')
-    if (thread.reply3 !== undefined && thread.reply3 !== '') tabs.push('reply3')
+    if (thread.reply1 !== undefined) tabs.push('reply1')
+    if (thread.reply2 !== undefined) tabs.push('reply2')
+    if (thread.reply3 !== undefined) tabs.push('reply3')
     return tabs
-  }, [thread])
+  }, [post, thread])
 
   // activeText는 아래 JSX 직전에 정의되므로 length만 여기서 계산
   const activeTextValue = activeTab === 'main' ? thread.main : (thread[activeTab] ?? '')

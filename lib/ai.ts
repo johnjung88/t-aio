@@ -16,5 +16,9 @@ export async function generateText(prompt: string): Promise<string> {
 export async function generateJSON<T>(prompt: string): Promise<T> {
   const text = await generateText(prompt)
   const cleaned = text.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
-  return JSON.parse(cleaned) as T
+  try {
+    return JSON.parse(cleaned) as T
+  } catch {
+    throw new Error(`AI 응답을 JSON으로 파싱할 수 없습니다. 원시 응답: ${cleaned.slice(0, 200)}`)
+  }
 }

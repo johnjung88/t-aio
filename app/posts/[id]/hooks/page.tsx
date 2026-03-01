@@ -16,14 +16,6 @@ function renderStars(strength: HookAngle['strength']) {
   return '★'.repeat(strength) + '☆'.repeat(5 - strength)
 }
 
-function isThreadPost(value: unknown): value is ThreadPost {
-  return Boolean(
-    value &&
-      typeof value === 'object' &&
-      'id' in value &&
-      'thread' in value
-  )
-}
 
 export default function HooksPage({ params }: { params: { id: string } }) {
   const router = useRouter()

@@ -35,6 +35,6 @@ export async function POST(req: NextRequest) {
 
     return ok({ name, description, price, originalPrice, platform })
   } catch {
-    return ok({ name: '', description: '', price: undefined, originalPrice: undefined, platform: 'other' })
+    return fail('상품 정보를 추출할 수 없습니다', 500, 'SCRAPE_FAILED')
   }
 }
