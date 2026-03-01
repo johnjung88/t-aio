@@ -29,7 +29,7 @@ export default function NewPostPage() {
         setSuggested(sugg.product)
         setForm((f) => ({ ...f, affiliateProductId: sugg.product.id }))
       }
-      if (accs.length > 0) setForm((f) => ({ ...f, account: accs[0].username }))
+      if (accs.length > 0) setForm((f) => ({ ...f, account: accs[0].id }))
     })
   }, [])
 

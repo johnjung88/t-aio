@@ -100,13 +100,18 @@ export default function SchedulePage({ params }: { params: { id: string } }) {
         body: JSON.stringify({ scheduledAt: iso, status: 'scheduled' }),
       })
       const payload = (await response.json()) as unknown
-      if (!response.ok || !isThreadPost(payload)) {
+      if (!response.ok) {
+        setMessage('예약 저장에 실패했습니다.')
+        return
+      }
+      const nextPost = (payload as { data?: unknown }).data ?? payload
+      if (!isThreadPost(nextPost)) {
         setMessage('예약 저장에 실패했습니다.')
         return
       }
 
-      setPost(payload)
-      setScheduledAt(toDatetimeLocalValue(payload.scheduledAt))
+      setPost(nextPost)
+      setScheduledAt(toDatetimeLocalValue(nextPost.scheduledAt))
       setMessage('예약이 확정되었습니다.')
     } catch {
       setMessage('예약 저장 중 오류가 발생했습니다.')

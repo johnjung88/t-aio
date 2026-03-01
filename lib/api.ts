@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { ZodError } from '@/lib/zod'
 
 export interface ApiError {
   code: string
@@ -42,8 +43,7 @@ export function fail(message: string, status = 400, code = 'BAD_REQUEST', detail
   return NextResponse.json(body, { status })
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function zodErrorDetails(error: any) {
+export function zodErrorDetails(error: ZodError) {
   const flat = error.flatten?.() ?? { fieldErrors: {}, formErrors: [] }
   const issues = (error.issues ?? []) as Array<{ path: Array<string | number>; message: string }>
   return {

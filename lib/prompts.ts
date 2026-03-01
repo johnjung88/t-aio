@@ -11,7 +11,7 @@ export function buildHookGenerationPrompt(
   const productInfo = product
     ? `제품명: ${product.name}
 카테고리: ${product.category}
-가격: ${product.price ? `${product.price.toLocaleString()}원` : '미정'}${product.originalPrice ? ` (원가 ${product.originalPrice.toLocaleString()}원, ${Math.round((1 - product.price! / product.originalPrice) * 100)}% 할인)` : ''}
+가격: ${product.price ? `${product.price.toLocaleString()}원` : '미정'}${product.originalPrice && product.price ? ` (원가 ${product.originalPrice.toLocaleString()}원, ${Math.round((1 - product.price / product.originalPrice) * 100)}% 할인)` : ''}
 설명: ${product.description ?? '없음'}
 키워드: ${product.hookKeywords?.join(', ') ?? '없음'}`
     : `주제: ${topic}`
