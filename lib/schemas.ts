@@ -106,6 +106,9 @@ export interface AccountCreateInput {
   dailyPostTarget?: number
   autoGenTime?: string
   categories?: string[]
+  loginMethod?: 'direct' | 'google'
+  loginEmail?: string
+  loginPassword?: string
 }
 
 export interface GenerateHookInput {
