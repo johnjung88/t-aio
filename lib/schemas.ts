@@ -62,6 +62,9 @@ const accountPatchSchema = z.object({
   categories: z.array(z.string()).optional(),
   todayPostCount: z.number().int().min(0).optional(),
   todayPostDate: z.string().optional(),
+  loginMethod: z.enum(['direct', 'google'] as const).optional(),
+  loginEmail: z.string().email().optional(),
+  loginPassword: z.string().optional(),
 })
 
 const strategySchema = z.object({
@@ -176,6 +179,9 @@ export const accountCreateBodySchema = z.object({
   dailyPostTarget: z.number().int().min(0).optional(),
   autoGenTime: z.string().optional(),
   categories: z.array(z.string()).optional(),
+  loginMethod: z.enum(['direct', 'google'] as const).optional(),
+  loginEmail: z.string().email().optional(),
+  loginPassword: z.string().optional(),
 })
 
 export const accountPatchBodySchema = accountPatchSchema

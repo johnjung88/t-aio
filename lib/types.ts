@@ -72,6 +72,10 @@ export interface Account {
   // Rate limit 추적
   todayPostCount: number      // 오늘 발행 수
   todayPostDate: string       // YYYY-MM-DD (날짜 바뀌면 리셋)
+  // 브라우저 자동화 로그인 정보
+  loginMethod: 'direct' | 'google'
+  loginEmail?: string
+  loginPassword?: string
 }
 
 export interface StrategyConfig {
