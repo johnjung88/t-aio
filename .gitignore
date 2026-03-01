@@ -38,3 +38,6 @@ next-env.d.ts
 # T-AIO local data (JSON store)
 /data/
 .env
+
+# git worktrees
+.worktrees/
