@@ -32,6 +32,7 @@ export interface ThreadPost {
   hookAngles?: HookAngle[]
   selectedHook?: string
   notes?: string
+  replyCount?: number
 }
 
 export interface HookAngle {

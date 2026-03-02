@@ -85,6 +85,7 @@ export interface PostCreateInput {
   account?: string
   affiliateProductId?: string
   notes?: string
+  replyCount?: number
 }
 
 export interface ProductCreateInput {
@@ -157,6 +158,7 @@ export const postCreateBodySchema = z.object({
   account: z.string().optional(),
   affiliateProductId: z.string().optional(),
   notes: z.string().optional(),
+  replyCount: z.number().int().min(0).max(3).optional(),
 })
 
 export const postPatchBodySchema = postPatchSchema

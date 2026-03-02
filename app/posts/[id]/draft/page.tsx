@@ -69,7 +69,7 @@ export default function DraftPage({ params }: { params: { id: string } }) {
       const response = await fetch('/api/generate/draft', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId: post.id }),
+        body: JSON.stringify({ postId: post.id, replyCount: post.replyCount }),
       })
       const res = await response.json()
       if (!response.ok) {

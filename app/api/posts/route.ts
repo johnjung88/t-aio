@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
     thread: { main: '', reply1: '', reply2: '', reply3: '' },
     affiliateProductId: body.affiliateProductId,
     notes: body.notes,
+    replyCount: body.replyCount,
   }
 
   posts.push(newPost)
