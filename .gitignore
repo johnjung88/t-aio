@@ -39,5 +39,8 @@ next-env.d.ts
 /data/
 .env
 
+# Threads 세션 쿠키 (재시작 후 로그인 유지용, 커밋 금지)
+data/sessions/
+
 # git worktrees
 .worktrees/
