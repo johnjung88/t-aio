@@ -1,41 +1,81 @@
 import type { Account, ThreadPost } from './types'
-import { launchBrowser, newStealthContext, randomDelay, humanType } from './browser'
-import { loadSession, saveSession, clearSession } from './sessions'
-import { loginDirect, loginGoogle } from './threads-login'
 import { readStore } from './store'
+import {
+  ensureServer,
+  ensureProfile,
+  startInstance,
+  openTab,
+  navigate,
+  snapshot,
+  click,
+  fill,
+  waitForRef,
+  type SnapElement,
+} from './pinchtab'
 
-async function ensureLoggedIn(account: Account): Promise<{ ctx: import('playwright').BrowserContext; browser: import('playwright').Browser } | null> {
-  const browser = await launchBrowser()
-  const cookies = loadSession(account.id)
-  const ctx = await newStealthContext(browser, cookies ?? undefined)
+// ─── Login Check/Flow ─────────────────────────────────────────────────────────
 
-  // 세션 유효성 확인
-  if (cookies) {
-    const page = await ctx.newPage()
-    await page.goto('https://www.threads.net', { waitUntil: 'networkidle' })
-    await randomDelay(1000, 2000)
-    const url = page.url()
-    await page.close()
-    if (!url.includes('/login')) return { ctx, browser }
-    // 세션 만료 — 재로그인
-    clearSession(account.id)
+function findRef(elements: SnapElement[], ...matchers: Array<(e: SnapElement) => boolean>): string | null {
+  for (const matcher of matchers) {
+    const found = elements.find(matcher)
+    if (found) return found.ref
   }
-
-  // 로그인
-  const success = account.loginMethod === 'google'
-    ? await loginGoogle(ctx, account.loginEmail!, account.loginPassword!)
-    : await loginDirect(ctx, account.loginEmail!, account.loginPassword!)
-
-  if (!success) {
-    await browser.close()
-    return null
-  }
-
-  // 새 쿠키 저장
-  const newCookies = await ctx.cookies()
-  saveSession(account.id, newCookies)
-  return { ctx, browser }
+  return null
 }
+
+async function ensureLoggedIn(tabId: string, account: Account): Promise<void> {
+  const elements = await snapshot(tabId)
+
+  const isLoginPage = elements.some(e =>
+    e.type === 'email' ||
+    (typeof e.placeholder === 'string' && /email|이메일|username/i.test(e.placeholder)) ||
+    (typeof e.name === 'string' && /log.?in|sign.?in|로그인/i.test(e.name))
+  )
+
+  if (!isLoginPage) return // 이미 로그인 상태
+
+  console.log(`[Bot] 로그인 진행: ${account.username}`)
+
+  // 이메일 입력
+  const emailRef = await waitForRef(
+    tabId,
+    els => findRef(els,
+      e => e.type === 'email',
+      e => typeof e.placeholder === 'string' && /email|이메일|username/i.test(e.placeholder)
+    ),
+    10000
+  )
+  await fill(tabId, emailRef, account.loginEmail!)
+
+  // 비밀번호 입력
+  const elements2 = await snapshot(tabId)
+  const passRef = findRef(elements2, e => e.type === 'password')
+  if (!passRef) throw new Error('[Bot] 비밀번호 입력창을 찾을 수 없음')
+  await fill(tabId, passRef, account.loginPassword!)
+
+  // 로그인 버튼
+  const elements3 = await snapshot(tabId)
+  const loginRef = findRef(
+    elements3,
+    e => e.type === 'submit',
+    e => typeof e.name === 'string' && /log.?in|sign.?in|로그인/i.test(e.name)
+  )
+  if (!loginRef) throw new Error('[Bot] 로그인 버튼을 찾을 수 없음')
+  await click(tabId, loginRef)
+
+  // 로그인 완료 대기 (로그인 폼이 사라질 때까지)
+  await waitForRef(
+    tabId,
+    els => {
+      const stillOnLogin = els.some(e => e.type === 'password')
+      return stillOnLogin ? null : 'done'
+    },
+    20000
+  )
+  console.log(`[Bot] 로그인 완료: ${account.username}`)
+}
+
+// ─── Publish Post ─────────────────────────────────────────────────────────────
 
 export async function publishPost(post: ThreadPost): Promise<string | null> {
   const accounts = readStore<Account[]>('accounts', [])
@@ -45,61 +85,79 @@ export async function publishPost(post: ThreadPost): Promise<string | null> {
     return null
   }
 
-  const result = await ensureLoggedIn(account)
-  if (!result) {
-    console.error(`[Bot] 로그인 실패: ${account.username}`)
-    return null
-  }
-
-  const { ctx, browser } = result
-  const page = await ctx.newPage()
-  let publishedUrl: string | null = null
+  await ensureServer()
+  const profileId = await ensureProfile(account.username)
+  const instanceId = await startInstance(profileId, false)
+  const tabId = await openTab(instanceId, 'https://www.threads.net')
 
   try {
-    await page.goto('https://www.threads.net', { waitUntil: 'networkidle' })
-    await randomDelay(1000, 2000)
+    await ensureLoggedIn(tabId, account)
 
     // 새 스레드 작성 버튼
-    const newPostBtn = page.locator('a[href="/intent/post"], [aria-label*="스레드"], [aria-label*="thread"]').first()
-    await newPostBtn.click()
-    await randomDelay(800, 1500)
+    const newPostRef = await waitForRef(
+      tabId,
+      els => findRef(els,
+        e => typeof e.href === 'string' && e.href.includes('/intent/post'),
+        e => typeof e.name === 'string' && /새.?글|new.?thread|스레드.?작성/i.test(e.name)
+      ),
+      15000
+    )
+    await click(tabId, newPostRef)
 
-    // 본문 입력
-    const editor = page.locator('[contenteditable="true"], textarea').first()
-    await editor.click()
-    await randomDelay(300, 700)
-    await humanType(page, post.thread.main)
-    await randomDelay(1000, 2000)
+    // 에디터 대기 및 입력
+    const editorRef = await waitForRef(
+      tabId,
+      els => findRef(els,
+        e => e.role === 'textbox',
+        e => typeof e.placeholder === 'string' && /스레드|thread|무슨.?생각/i.test(e.placeholder)
+      ),
+      10000
+    )
+    await fill(tabId, editorRef, post.thread.main)
 
-    // 게시 버튼
-    const postBtn = page.locator('button:has-text("게시"), button:has-text("Post")').first()
-    await postBtn.click()
-    await randomDelay(2000, 4000)
+    // 게시 버튼 클릭
+    const elements = await snapshot(tabId)
+    const postBtnRef = findRef(
+      elements,
+      e => typeof e.name === 'string' && /^(게시|Post)$/i.test(e.name),
+      e => typeof e.text === 'string' && /^(게시|Post)$/i.test(e.text)
+    )
+    if (!postBtnRef) throw new Error('[Bot] 게시 버튼을 찾을 수 없음')
+    await click(tabId, postBtnRef)
 
-    // 발행된 URL 추출
-    publishedUrl = page.url()
+    // 발행 후 URL 안정화 대기
+    await new Promise(resolve => setTimeout(resolve, 3000))
 
-    // 피드 잠깐 스크롤 (봇 회피)
-    await page.mouse.wheel(0, 300)
-    await randomDelay(1000, 2000)
-    await page.mouse.wheel(0, -300)
-    await randomDelay(500, 1000)
-
-    // 쿠키 업데이트
-    const updatedCookies = await ctx.cookies()
-    saveSession(account.id, updatedCookies)
+    // 발행된 URL 추출 (텍스트에서 파싱 또는 현재 탭 URL)
+    const publishedUrl = await extractPublishedUrl(tabId, account.username)
 
     console.log(`[Bot] 발행 완료: ${post.id} → ${publishedUrl}`)
+    return publishedUrl
   } catch (err) {
     console.error('[Bot] 발행 실패:', err)
-    publishedUrl = null
-  } finally {
-    await page.close()
-    await browser.close()
+    return null
   }
-
-  return publishedUrl
 }
+
+async function extractPublishedUrl(tabId: string, username: string): Promise<string> {
+  // snapshot에서 threads.net/@username/post/... 형태 링크 탐색
+  const elements = await snapshot(tabId)
+  const postLink = elements.find(e =>
+    typeof e.href === 'string' &&
+    e.href.includes('/post/') &&
+    e.href.includes(username)
+  )
+  if (postLink?.href) return postLink.href as string
+
+  // 텍스트에서 URL 패턴 추출 시도
+  const text = await import('./pinchtab').then(m => m.getText(tabId))
+  const match = text.match(/https:\/\/www\.threads\.net\/@[\w.]+\/post\/[\w-]+/)
+  if (match) return match[0]
+
+  return `https://www.threads.net/@${username}`
+}
+
+// ─── Publish Reply ─────────────────────────────────────────────────────────────
 
 export async function publishReply(post: ThreadPost, replyText: string): Promise<boolean> {
   if (!post.publishedUrl) {
@@ -114,50 +172,40 @@ export async function publishReply(post: ThreadPost, replyText: string): Promise
     return false
   }
 
-  const result = await ensureLoggedIn(account)
-  if (!result) {
-    console.error(`[Bot] 로그인 실패: ${account.username}`)
-    return false
-  }
-
-  const { ctx, browser } = result
-  const page = await ctx.newPage()
-  let success = false
+  await ensureServer()
+  const profileId = await ensureProfile(account.username)
+  const instanceId = await startInstance(profileId, false)
+  const tabId = await openTab(instanceId, post.publishedUrl)
 
   try {
-    // 발행된 포스트 URL로 이동
-    await page.goto(post.publishedUrl, { waitUntil: 'networkidle' })
-    await randomDelay(1500, 3000)
+    await ensureLoggedIn(tabId, account)
 
-    // 답글 버튼 클릭
-    const replyBtn = page.locator('[aria-label*="답글"], [aria-label*="Reply"], [aria-label*="reply"]').first()
-    await replyBtn.click()
-    await randomDelay(800, 1500)
+    // 답글 입력창 찾기
+    const replyRef = await waitForRef(
+      tabId,
+      els => findRef(els,
+        e => e.role === 'textbox' && typeof e.placeholder === 'string' && /답글|reply/i.test(e.placeholder),
+        e => e.role === 'textbox'
+      ),
+      15000
+    )
+    await fill(tabId, replyRef, replyText)
 
-    // 댓글 입력창
-    const editor = page.locator('[contenteditable="true"], textarea').first()
-    await editor.click()
-    await randomDelay(300, 700)
-    await humanType(page, replyText)
-    await randomDelay(1000, 2000)
+    // 게시 버튼 클릭
+    const elements = await snapshot(tabId)
+    const postBtnRef = findRef(
+      elements,
+      e => typeof e.name === 'string' && /^(게시|Post)$/i.test(e.name),
+      e => typeof e.text === 'string' && /^(게시|Post)$/i.test(e.text)
+    )
+    if (!postBtnRef) throw new Error('[Bot] 답글 게시 버튼을 찾을 수 없음')
+    await click(tabId, postBtnRef)
 
-    // 게시 버튼
-    const postBtn = page.locator('button:has-text("게시"), button:has-text("Post")').first()
-    await postBtn.click()
-    await randomDelay(2000, 4000)
-
-    // 쿠키 업데이트
-    const updatedCookies = await ctx.cookies()
-    saveSession(account.id, updatedCookies)
-
-    success = true
+    await new Promise(resolve => setTimeout(resolve, 2000))
     console.log(`[Bot] 답글 완료: post ${post.id}, 내용: ${replyText.slice(0, 30)}...`)
+    return true
   } catch (err) {
     console.error('[Bot] 답글 실패:', err)
-  } finally {
-    await page.close()
-    await browser.close()
+    return false
   }
-
-  return success
 }
