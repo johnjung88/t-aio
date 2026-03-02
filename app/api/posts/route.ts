@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     topic: body.topic ?? '',
     keywords: body.keywords ?? [],
     account: body.account ?? 'default',
-    thread: { main: '', reply1: '', reply2: '', reply3: '' },
+    thread: { main: '' },
     affiliateProductId: body.affiliateProductId,
     notes: body.notes,
     replyCount: body.replyCount,
