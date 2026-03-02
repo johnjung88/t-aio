@@ -47,11 +47,10 @@ export default function SchedulePage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([fetch('/api/posts').then((r) => r.json()), fetch('/api/strategy').then((r) => r.json())])
-      .then(([postsRes, stratRes]) => {
-        const posts: ThreadPost[] = postsRes.data ?? []
+    Promise.all([fetch(`/api/posts/${params.id}`).then((r) => r.json()), fetch('/api/strategy').then((r) => r.json())])
+      .then(([postRes, stratRes]) => {
+        const found: ThreadPost | null = postRes.data ?? null
         const strategyData: StrategyConfig = stratRes.data ?? stratRes
-        const found = posts.find((p) => p.id === params.id) ?? null
         setPost(found)
         setStrategy(strategyData)
         setScheduledAt(toDatetimeLocalValue(found?.scheduledAt))

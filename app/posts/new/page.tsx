@@ -30,27 +30,36 @@ export default function NewPostPage() {
         setForm((f) => ({ ...f, affiliateProductId: sugg.product.id }))
       }
       if (accs.length > 0) setForm((f) => ({ ...f, account: accs[0].id }))
+    }).catch(() => {
+      console.error('[NewPost] 초기 데이터 로드 실패')
     })
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
-    const body: Record<string, unknown> = {
-      contentType,
-      topic: form.topic,
-      account: form.account,
-      keywords: form.keywords.split(',').map((k) => k.trim()).filter(Boolean),
+    try {
+      const body: Record<string, unknown> = {
+        contentType,
+        topic: form.topic,
+        account: form.account,
+        keywords: form.keywords.split(',').map((k) => k.trim()).filter(Boolean),
+        replyCount: form.replyCount,
+      }
+      if (contentType === 'affiliate' && form.affiliateProductId) {
+        body.affiliateProductId = form.affiliateProductId
+        const prod = products.find((p) => p.id === form.affiliateProductId)
+        if (prod && !form.topic) body.topic = prod.name
+      }
+      const r = await fetch('/api/posts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const res = await r.json()
+      const newPost = res.data ?? res
+      router.push(`/posts/${newPost.id}/hooks`)
+    } catch {
+      console.error('[NewPost] 포스트 생성 실패')
+    } finally {
+      setSaving(false)
     }
-    if (contentType === 'affiliate' && form.affiliateProductId) {
-      body.affiliateProductId = form.affiliateProductId
-      const prod = products.find((p) => p.id === form.affiliateProductId)
-      if (prod && !form.topic) body.topic = prod.name
-    }
-    const r = await fetch('/api/posts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    const res = await r.json()
-    const newPost = res.data ?? res
-    router.push(`/posts/${newPost.id}/hooks`)
   }
 
   return (

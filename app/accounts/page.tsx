@@ -11,7 +11,10 @@ export default function AccountsPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    fetch('/api/accounts').then((r) => r.json()).then((res) => setAccounts(res.data ?? []))
+    fetch('/api/accounts')
+      .then((r) => r.json())
+      .then((res) => setAccounts(res.data ?? []))
+      .catch(() => console.error('[Accounts] 계정 목록 로드 실패'))
   }, [])
 
   const handleAdd = async (e: React.FormEvent) => {

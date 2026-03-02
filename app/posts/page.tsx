@@ -24,7 +24,10 @@ export default function PostsPage() {
   const [filter, setFilter] = useState<string>('all')
 
   useEffect(() => {
-    fetch('/api/posts').then((r) => r.json()).then((res) => setPosts(res.data ?? []))
+    fetch('/api/posts')
+      .then((r) => r.json())
+      .then((res) => setPosts(res.data ?? []))
+      .catch(() => console.error('[Posts] 포스트 목록 로드 실패'))
   }, [])
 
   const filtered = filter === 'all' ? posts : posts.filter((p) => p.status === filter)

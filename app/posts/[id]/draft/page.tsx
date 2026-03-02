@@ -25,11 +25,10 @@ export default function DraftPage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     setLoading(true)
-    fetch('/api/posts')
+    fetch(`/api/posts/${params.id}`)
       .then((r) => r.json())
       .then((res) => {
-        const posts: ThreadPost[] = res.data ?? []
-        const found = posts.find((p) => p.id === params.id) ?? null
+        const found: ThreadPost | null = res.data ?? null
         setPost(found)
         if (found) setThread(found.thread)
       })
@@ -70,7 +69,7 @@ export default function DraftPage({ params }: { params: { id: string } }) {
       const response = await fetch('/api/generate/draft', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId: post.id }),
+        body: JSON.stringify({ postId: post.id, replyCount: post.replyCount }),
       })
       const res = await response.json()
       if (!response.ok) {
