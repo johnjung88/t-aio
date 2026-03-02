@@ -9,11 +9,12 @@ Threads 어필리에이트 자동화 도구. Next.js 14 App Router + 로컬 JSON
 - **AI**: Anthropic Claude API (`@anthropic-ai/sdk`) — `lib/ai.ts`
 - **Validation**: Zod (`lib/schemas.ts`)
 - **Scheduler**: `node-cron` (`lib/scheduler.ts`)
+- **Browser Automation**: Playwright (`lib/browser.ts`, `lib/threads-bot.ts`)
 
 ## HARD CONSTRAINTS (절대 위반 금지)
 
 1. **Prisma 절대 사용 금지** — DB 없음, `readStore`/`writeStore`만 사용
-2. **새 패키지 설치 금지** — package.json 수정 불가 (이미 설치된 패키지만 사용)
+2. **사전 승인 없이 새 패키지 설치 금지** — package.json 수정 시 반드시 사전 승인 필요 (이미 설치된 패키지만 기본 사용)
 3. **모든 페이지는 `'use client'`** — App Router 클라이언트 컴포넌트
 4. **CSS 변수만 사용** — Tailwind 클래스 없음, `var(--primary)` 등 전용 변수 사용
 5. **null 체크 필수** — 데이터 없어도 크래시 없어야 함

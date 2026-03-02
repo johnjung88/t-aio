@@ -8,6 +8,7 @@ import { readStore, writeStore } from './store'
 import { selectProductForAccount } from './product-selector'
 import { generateJSON } from './ai'
 import { buildHookGenerationPrompt, buildDraftGenerationPrompt } from './prompts'
+import { publishPost, publishReply } from './threads-bot'
 import type { Account, AffiliateProduct, HookAngle, StrategyConfig, ThreadPost } from './types'
 
 interface JobEntry {
@@ -62,8 +63,7 @@ function checkAndIncrementRateLimit(account: Account): { allowed: boolean; remai
   return { allowed: true, remaining: DAILY_LIMIT - current - 1 }
 }
 
-// 댓글 자동 추가 (랜덤 딜레이 후 실행)
-// 실제 Threads API 연동 전까지는 posts.json에 commentScheduledAt/commentPostedAt만 기록
+// 댓글 자동 추가 (랜덤 딜레이 후 reply1~3 순서대로 발행)
 async function scheduleCommentPost(postId: string, delayMs: number) {
   await new Promise((resolve) => setTimeout(resolve, delayMs))
 
@@ -71,13 +71,30 @@ async function scheduleCommentPost(postId: string, delayMs: number) {
   const idx = posts.findIndex((p) => p.id === postId)
   if (idx === -1) return
 
-  // TODO: 실제 Threads API 댓글 발행 연동 시 여기에 구현
-  // await threadsApi.createReply(post.publishedUrl, post.thread.reply3)
+  const post = posts[idx]
+  const strategy = readStore<StrategyConfig>('strategy', DEFAULT_STRATEGY)
+  const replies = [post.thread.reply1, post.thread.reply2, post.thread.reply3].filter(Boolean) as string[]
 
-  posts[idx].commentPostedAt = new Date().toISOString()
-  posts[idx].updatedAt = new Date().toISOString()
-  writeStore('posts', posts)
-  console.log(`[Scheduler] 댓글 게시 완료: post ${postId} (딜레이 ${Math.round(delayMs / 1000)}초)`)
+  for (let i = 0; i < replies.length; i++) {
+    await publishReply(post, replies[i])
+    // 마지막 댓글이 아니면 다음 댓글 전 랜덤 딜레이
+    if (i < replies.length - 1) {
+      const interReplyDelay = randomDelay(
+        strategy.commentDelayMin ?? 20,
+        strategy.commentDelayMax ?? 90
+      )
+      await new Promise((resolve) => setTimeout(resolve, interReplyDelay))
+    }
+  }
+
+  const updatedPosts = readStore<ThreadPost[]>('posts', [])
+  const updatedIdx = updatedPosts.findIndex((p) => p.id === postId)
+  if (updatedIdx !== -1) {
+    updatedPosts[updatedIdx].commentPostedAt = new Date().toISOString()
+    updatedPosts[updatedIdx].updatedAt = new Date().toISOString()
+    writeStore('posts', updatedPosts)
+  }
+  console.log(`[Scheduler] 댓글 게시 완료: post ${postId} (${replies.length}개, 딜레이 ${Math.round(delayMs / 1000)}초)`)
 }
 
 async function runAutoGen(accountId: string) {
@@ -147,6 +164,19 @@ async function runAutoGen(accountId: string) {
   }
   posts.push(newPost)
   writeStore('posts', posts)
+
+  // Threads 발행
+  const publishedUrl = await publishPost(newPost)
+  if (publishedUrl) {
+    const postIdx = posts.findIndex(p => p.id === newPost.id)
+    if (postIdx !== -1) {
+      posts[postIdx].status = 'published'
+      posts[postIdx].publishedAt = new Date().toISOString()
+      posts[postIdx].publishedUrl = publishedUrl
+      posts[postIdx].updatedAt = new Date().toISOString()
+      writeStore('posts', posts)
+    }
+  }
 
   // 상품 useCount 업데이트
   if (product) {

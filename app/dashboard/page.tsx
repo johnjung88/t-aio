@@ -14,7 +14,8 @@ const STATUS_COLS = [
 const DAILY_LIMIT = 250
 
 function RateLimitMeter({ account }: { account: Account }) {
-  const count = account.todayPostCount ?? 0
+  const today = new Date().toISOString().slice(0, 10)
+  const count = account.todayPostDate === today ? (account.todayPostCount ?? 0) : 0
   const pct = Math.min((count / DAILY_LIMIT) * 100, 100)
   const remaining = DAILY_LIMIT - count
   const color = pct > 80 ? 'var(--red)' : pct > 60 ? 'var(--orange)' : 'var(--mint)'

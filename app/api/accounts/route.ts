@@ -35,6 +35,9 @@ export async function POST(req: NextRequest) {
     categories: body.categories ?? [],
     todayPostCount: 0,
     todayPostDate: '',
+    loginMethod: body.loginMethod ?? 'direct',
+    loginEmail: body.loginEmail,
+    loginPassword: body.loginPassword,
   }
 
   accounts.push(newAccount)
