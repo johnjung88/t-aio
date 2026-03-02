@@ -8,6 +8,7 @@ import {
   generateDraftBodySchema,
   schedulerBodySchema,
   scrapeBodySchema,
+  strategyBodySchema,
 } from '@/lib/schemas'
 
 describe('postCreateBodySchema', () => {
@@ -133,6 +134,34 @@ describe('scrapeBodySchema', () => {
 
   it('잘못된 url 거부', () => {
     const result = scrapeBodySchema.safeParse({ url: 'not-a-url' })
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('strategyBodySchema — commentDelay 검증', () => {
+  const base = {
+    systemPromptBase: '',
+    hookFormulas: [],
+    optimalPostLength: 150,
+    hashtagStrategy: '',
+    bestPostTimes: [],
+    replyCount: 3,
+    commentDelayMin: 20,
+    commentDelayMax: 90,
+  }
+
+  it('commentDelayMin 0은 실패', () => {
+    const result = strategyBodySchema.safeParse({ ...base, commentDelayMin: 0 })
+    expect(result.success).toBe(false)
+  })
+
+  it('commentDelayMin 1은 성공', () => {
+    const result = strategyBodySchema.safeParse({ ...base, commentDelayMin: 1 })
+    expect(result.success).toBe(true)
+  })
+
+  it('commentDelayMax 0은 실패', () => {
+    const result = strategyBodySchema.safeParse({ ...base, commentDelayMax: 0 })
     expect(result.success).toBe(false)
   })
 })

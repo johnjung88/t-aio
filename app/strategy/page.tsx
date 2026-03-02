@@ -47,11 +47,11 @@ function validateAndBuildPayload(form: StrategyForm): { ok: true; data: Strategy
   if (!Number.isInteger(optimalPostLength) || optimalPostLength <= 0) {
     return { ok: false, error: '최적 글자수는 1 이상의 정수여야 합니다.' }
   }
-  if (!Number.isInteger(commentDelayMin) || commentDelayMin < 0) {
-    return { ok: false, error: '최소 댓글 지연은 0 이상의 정수여야 합니다.' }
+  if (!Number.isInteger(commentDelayMin) || commentDelayMin < 1) {
+    return { ok: false, error: '최소 댓글 지연은 1 이상의 정수여야 합니다.' }
   }
-  if (!Number.isInteger(commentDelayMax) || commentDelayMax < 0) {
-    return { ok: false, error: '최대 댓글 지연은 0 이상의 정수여야 합니다.' }
+  if (!Number.isInteger(commentDelayMax) || commentDelayMax < 1) {
+    return { ok: false, error: '최대 댓글 지연은 1 이상의 정수여야 합니다.' }
   }
   if (commentDelayMin > commentDelayMax) {
     return { ok: false, error: '최소 댓글 지연은 최대 댓글 지연보다 클 수 없습니다.' }
