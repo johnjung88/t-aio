@@ -7,7 +7,10 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<AffiliateProduct[]>([])
 
   useEffect(() => {
-    fetch('/api/products').then((r) => r.json()).then((res) => setProducts(res.data ?? []))
+    fetch('/api/products')
+      .then((r) => r.json())
+      .then((res) => setProducts(res.data ?? []))
+      .catch(() => console.error('[Products] 제품 목록 로드 실패'))
   }, [])
 
   const handleDelete = async (id: string) => {
