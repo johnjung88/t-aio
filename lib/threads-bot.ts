@@ -5,7 +5,6 @@ import {
   ensureProfile,
   startInstance,
   openTab,
-  navigate,
   snapshot,
   click,
   fill,
