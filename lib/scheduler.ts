@@ -8,6 +8,7 @@ import { readStore, writeStore } from './store'
 import { selectProductForAccount } from './product-selector'
 import { generateJSON } from './ai'
 import { buildHookGenerationPrompt, buildDraftGenerationPrompt } from './prompts'
+import { publishPost } from './threads-bot'
 import type { Account, AffiliateProduct, HookAngle, StrategyConfig, ThreadPost } from './types'
 
 interface JobEntry {
@@ -147,6 +148,19 @@ async function runAutoGen(accountId: string) {
   }
   posts.push(newPost)
   writeStore('posts', posts)
+
+  // Threads 발행
+  const publishedUrl = await publishPost(newPost)
+  if (publishedUrl) {
+    const postIdx = posts.findIndex(p => p.id === newPost.id)
+    if (postIdx !== -1) {
+      posts[postIdx].status = 'published'
+      posts[postIdx].publishedAt = new Date().toISOString()
+      posts[postIdx].publishedUrl = publishedUrl
+      posts[postIdx].updatedAt = new Date().toISOString()
+      writeStore('posts', posts)
+    }
+  }
 
   // 상품 useCount 업데이트
   if (product) {
