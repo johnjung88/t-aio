@@ -28,11 +28,10 @@ export default function PublishPage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     setLoading(true)
-    fetch('/api/posts')
+    fetch(`/api/posts/${params.id}`)
       .then((r) => r.json())
       .then((res) => {
-        const posts: ThreadPost[] = res.data ?? []
-        const found = posts.find((p) => p.id === params.id) ?? null
+        const found: ThreadPost | null = res.data ?? null
         setPost(found)
         setPublishedUrl(found?.publishedUrl ?? '')
       })
