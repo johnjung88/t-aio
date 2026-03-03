@@ -164,6 +164,14 @@ export async function waitForRef(
   throw new Error(`[Pinchtab] waitForRef timeout (${timeoutMs}ms)`)
 }
 
+// ─── Evaluate ────────────────────────────────────────────────────────────────
+
+export async function evaluate(tabId: string, expression: string): Promise<unknown> {
+  const res = await api<{ result?: unknown; error?: string }>('POST', `/tabs/${tabId}/evaluate`, { expression })
+  if (res.error) throw new Error(`[Pinchtab] evaluate error: ${res.error}`)
+  return res.result
+}
+
 // ─── Text ─────────────────────────────────────────────────────────────────────
 
 export async function getText(tabId: string): Promise<string> {

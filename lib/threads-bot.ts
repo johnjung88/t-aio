@@ -8,6 +8,8 @@ import {
   snapshot,
   click,
   fill,
+  type as typeText,
+  evaluate,
   waitForRef,
   type SnapElement,
 } from './pinchtab'
@@ -92,27 +94,19 @@ export async function publishPost(post: ThreadPost): Promise<string | null> {
   try {
     await ensureLoggedIn(tabId, account)
 
-    // 새 스레드 작성 버튼
-    const newPostRef = await waitForRef(
-      tabId,
-      els => findRef(els,
-        e => typeof e.href === 'string' && e.href.includes('/intent/post'),
-        e => typeof e.name === 'string' && /새.?글|new.?thread|스레드.?작성/i.test(e.name)
-      ),
-      15000
+    // Create 버튼 JS 클릭 (Threads isTrusted 검사 우회)
+    await evaluate(tabId,
+      `Array.from(document.querySelectorAll('div[role=button]'))
+        .find(e => e.textContent.trim() === 'Create')?.click()`
     )
-    await click(tabId, newPostRef)
 
-    // 에디터 대기 및 입력
+    // 에디터 대기 및 입력 (type action: CDP 키보드 이벤트로 Lexical에 직접 전달)
     const editorRef = await waitForRef(
       tabId,
-      els => findRef(els,
-        e => e.role === 'textbox',
-        e => typeof e.placeholder === 'string' && /스레드|thread|무슨.?생각/i.test(e.placeholder)
-      ),
+      els => findRef(els, e => e.role === 'textbox'),
       10000
     )
-    await fill(tabId, editorRef, post.thread.main)
+    await typeText(tabId, editorRef, post.thread.main)
 
     // 게시 버튼 클릭
     const elements = await snapshot(tabId)
@@ -188,7 +182,7 @@ export async function publishReply(post: ThreadPost, replyText: string): Promise
       ),
       15000
     )
-    await fill(tabId, replyRef, replyText)
+    await typeText(tabId, replyRef, replyText)
 
     // 게시 버튼 클릭
     const elements = await snapshot(tabId)
