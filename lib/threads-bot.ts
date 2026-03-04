@@ -37,38 +37,55 @@ async function ensureLoggedIn(tabId: string, account: Account): Promise<void> {
 
   console.log(`[Bot] 로그인 진행: ${account.username}`)
 
-  // 이메일 입력
-  const emailRef = await waitForRef(
-    tabId,
-    els => findRef(els,
-      e => e.type === 'email',
-      e => typeof e.placeholder === 'string' && /email|이메일|username/i.test(e.placeholder)
-    ),
-    10000
+  // 인스타그램 계정 선택 버튼 탐색 (Instagram 세션이 있을 때 나타남)
+  const instaBtn = elements.find(e =>
+    e.role === 'button' &&
+    typeof e.name === 'string' &&
+    (/continue with instagram/i.test(e.name) || e.name.includes(account.username))
   )
-  await fill(tabId, emailRef, account.loginEmail!)
 
-  // 비밀번호 입력
-  const elements2 = await snapshot(tabId)
-  const passRef = findRef(elements2, e => e.type === 'password')
-  if (!passRef) throw new Error('[Bot] 비밀번호 입력창을 찾을 수 없음')
-  await fill(tabId, passRef, account.loginPassword!)
+  if (instaBtn) {
+    // isTrusted 검사 우회 → evaluate()로 JS 클릭 (Create 버튼과 동일 방식)
+    console.log(`[Bot] 인스타그램 계정 선택 클릭: ${account.username}`)
+    await evaluate(tabId,
+      `Array.from(document.querySelectorAll('[role=button]'))
+        .find(e => e.textContent.includes('Continue with Instagram') || e.textContent.includes(${JSON.stringify(account.username)}))?.click()`
+    )
+  } else {
+    // fallback: 이메일/비밀번호 입력
+    const emailRef = await waitForRef(
+      tabId,
+      els => findRef(els,
+        e => e.type === 'email',
+        e => typeof e.placeholder === 'string' && /email|이메일|username/i.test(e.placeholder)
+      ),
+      10000
+    )
+    await fill(tabId, emailRef, account.loginEmail!)
 
-  // 로그인 버튼
-  const elements3 = await snapshot(tabId)
-  const loginRef = findRef(
-    elements3,
-    e => e.type === 'submit',
-    e => typeof e.name === 'string' && /log.?in|sign.?in|로그인/i.test(e.name)
-  )
-  if (!loginRef) throw new Error('[Bot] 로그인 버튼을 찾을 수 없음')
-  await click(tabId, loginRef)
+    const elements2 = await snapshot(tabId)
+    const passRef = findRef(elements2, e => e.type === 'password')
+    if (!passRef) throw new Error('[Bot] 비밀번호 입력창을 찾을 수 없음')
+    await fill(tabId, passRef, account.loginPassword!)
+
+    const elements3 = await snapshot(tabId)
+    const loginRef = findRef(
+      elements3,
+      e => e.type === 'submit',
+      e => typeof e.name === 'string' && /log.?in|sign.?in|로그인/i.test(e.name)
+    )
+    if (!loginRef) throw new Error('[Bot] 로그인 버튼을 찾을 수 없음')
+    await click(tabId, loginRef)
+  }
 
   // 로그인 완료 대기 (로그인 폼이 사라질 때까지)
   await waitForRef(
     tabId,
     els => {
-      const stillOnLogin = els.some(e => e.type === 'password')
+      const stillOnLogin = els.some(e =>
+        e.type === 'password' ||
+        (e.role === 'button' && typeof e.name === 'string' && /continue with instagram/i.test(e.name))
+      )
       return stillOnLogin ? null : 'done'
     },
     20000

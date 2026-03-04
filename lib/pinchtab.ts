@@ -100,7 +100,7 @@ export async function openTab(instanceId: string, url: string): Promise<string> 
 }
 
 export async function navigate(tabId: string, url: string): Promise<void> {
-  await api('POST', `/tabs/${tabId}/navigate`, { url })
+  await api('POST', '/navigate', { tabId, url })
 }
 
 // ─── Snapshot / Elements ──────────────────────────────────────────────────────
@@ -121,30 +121,31 @@ export interface SnapElement {
 
 export async function snapshot(tabId: string): Promise<SnapElement[]> {
   const res = await fetch(
-    `${BASE}/tabs/${tabId}/snapshot?filter=interactive&compact=true`
+    `${BASE}/snapshot?tabId=${encodeURIComponent(tabId)}&filter=interactive&compact=true`
   )
   if (!res.ok) throw new Error(`[Pinchtab] snapshot → ${res.status}`)
-  const data = await res.json() as { elements?: SnapElement[] } | SnapElement[]
-  // API가 { elements: [...] } 또는 [...] 형태로 반환할 수 있음
-  return Array.isArray(data) ? data : (data.elements ?? [])
+  const data = await res.json() as { nodes?: SnapElement[]; elements?: SnapElement[] } | SnapElement[]
+  // API가 { nodes: [...] } 또는 { elements: [...] } 또는 [...] 형태로 반환
+  if (Array.isArray(data)) return data
+  return data.nodes ?? data.elements ?? []
 }
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
 export async function click(tabId: string, ref: string): Promise<void> {
-  await api('POST', `/tabs/${tabId}/action`, { kind: 'click', ref })
+  await api('POST', '/action', { tabId, kind: 'click', ref })
 }
 
 export async function fill(tabId: string, ref: string, text: string): Promise<void> {
-  await api('POST', `/tabs/${tabId}/action`, { kind: 'fill', ref, text })
+  await api('POST', '/action', { tabId, kind: 'fill', ref, text })
 }
 
 export async function type(tabId: string, ref: string, text: string): Promise<void> {
-  await api('POST', `/tabs/${tabId}/action`, { kind: 'type', ref, text })
+  await api('POST', '/action', { tabId, kind: 'type', ref, text })
 }
 
 export async function press(tabId: string, key: string): Promise<void> {
-  await api('POST', `/tabs/${tabId}/action`, { kind: 'press', ref: 'keyboard', text: key })
+  await api('POST', '/action', { tabId, kind: 'press', ref: 'keyboard', text: key })
 }
 
 // ─── Wait Helpers ─────────────────────────────────────────────────────────────
@@ -167,7 +168,7 @@ export async function waitForRef(
 // ─── Evaluate ────────────────────────────────────────────────────────────────
 
 export async function evaluate(tabId: string, expression: string): Promise<unknown> {
-  const res = await api<{ result?: unknown; error?: string }>('POST', `/tabs/${tabId}/evaluate`, { expression })
+  const res = await api<{ result?: unknown; error?: string }>('POST', '/evaluate', { tabId, expression })
   if (res.error) throw new Error(`[Pinchtab] evaluate error: ${res.error}`)
   return res.result
 }
@@ -175,7 +176,7 @@ export async function evaluate(tabId: string, expression: string): Promise<unkno
 // ─── Text ─────────────────────────────────────────────────────────────────────
 
 export async function getText(tabId: string): Promise<string> {
-  const res = await fetch(`${BASE}/tabs/${tabId}/text`)
+  const res = await fetch(`${BASE}/text?tabId=${encodeURIComponent(tabId)}`)
   if (!res.ok) throw new Error(`[Pinchtab] getText → ${res.status}`)
   const data = await res.json() as { text?: string } | string
   return typeof data === 'string' ? data : (data.text ?? '')

@@ -18,6 +18,8 @@ vi.mock('@/lib/pinchtab', () => ({
   snapshot: vi.fn(),
   click: vi.fn(),
   fill: vi.fn(),
+  type: vi.fn(),
+  evaluate: vi.fn(),
   waitForRef: vi.fn(),
   getText: vi.fn(),
 }))
@@ -31,6 +33,8 @@ import {
   snapshot,
   click,
   fill,
+  type as typeAction,
+  evaluate,
   waitForRef,
   getText,
 } from '@/lib/pinchtab'
@@ -65,6 +69,10 @@ const AFTER_PUBLISH: SnapElement[] = [
 const REPLY_VIEW: SnapElement[] = [
   { ref: 'reply-textbox', role: 'textbox', placeholder: '답글 달기...' },
   { ref: 'reply-post-btn', role: 'button', name: '게시', text: '게시' },
+]
+
+const INSTA_LOGIN_PAGE: SnapElement[] = [
+  { ref: 'insta-btn', role: 'button', name: 'Instagram Continue with Instagram testuser Log in' },
 ]
 
 // ── Test account / post helpers ───────────────────────────────────────────────
@@ -109,13 +117,15 @@ function makePost(overrides: Partial<ThreadPost> = {}): ThreadPost {
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
-  vi.clearAllMocks()
+  vi.resetAllMocks()  // clearAllMocks는 mockOnce 큐를 초기화하지 않아서 테스트 간 오염 발생
   vi.mocked(ensureServer).mockResolvedValue(undefined)
   vi.mocked(ensureProfile).mockResolvedValue('profile1')
   vi.mocked(startInstance).mockResolvedValue('inst1')
   vi.mocked(openTab).mockResolvedValue('tab1')
   vi.mocked(click).mockResolvedValue(undefined)
   vi.mocked(fill).mockResolvedValue(undefined)
+  vi.mocked(typeAction).mockResolvedValue(undefined)
+  vi.mocked(evaluate).mockResolvedValue(undefined)
 })
 
 // ── publishPost ───────────────────────────────────────────────────────────────
@@ -150,21 +160,8 @@ describe('publishPost', () => {
     // 5) extractPublishedUrl의 snapshot
     vi.mocked(snapshot).mockResolvedValue(LOGGED_IN_HOME)
 
-    // waitForRef: matcher를 실제 실행하여 findRef 로직도 검증
-    vi.mocked(waitForRef).mockImplementation(async (_tabId, matcher) => {
-      const ref = matcher(LOGGED_IN_HOME)
-      if (ref) return ref
-      // 에디터 대기
-      const editorRef = matcher(POST_EDITOR)
-      if (editorRef) return editorRef
-      throw new Error('waitForRef: no match in fixture')
-    })
-
-    // 첫 번째 waitForRef → newPostRef (/intent/post 링크)
-    // 두 번째 waitForRef → editorRef (textbox)
-    vi.mocked(waitForRef)
-      .mockResolvedValueOnce('new-post-link')
-      .mockResolvedValueOnce('editor-ref')
+    // waitForRef: 에디터 대기 1회 (Create 버튼은 evaluate()로 직접 클릭)
+    vi.mocked(waitForRef).mockResolvedValueOnce('editor-ref')
 
     // 게시 버튼을 위한 snapshot — POST_EDITOR 반환
     vi.mocked(snapshot)
@@ -175,7 +172,7 @@ describe('publishPost', () => {
     const result = await publishPost(makePost())
 
     expect(result).toBe('https://www.threads.net/@testuser/post/abc123')
-    expect(fill).toHaveBeenCalledWith('tab1', 'editor-ref', '테스트 포스트 내용입니다.')
+    expect(typeAction).toHaveBeenCalledWith('tab1', 'editor-ref', '테스트 포스트 내용입니다.')
     expect(click).toHaveBeenCalledWith('tab1', 'post-btn')
   })
 
@@ -192,14 +189,32 @@ describe('publishPost', () => {
     vi.mocked(waitForRef)
       .mockResolvedValueOnce('email-input')   // email waitForRef
       .mockResolvedValueOnce('done')          // 로그인 완료 대기
-      .mockResolvedValueOnce('new-post-link') // 새 포스트 버튼
-      .mockResolvedValueOnce('editor-ref')    // 에디터
+      .mockResolvedValueOnce('editor-ref')    // 에디터 (Create 버튼은 evaluate()로 클릭)
 
     const result = await publishPost(makePost())
 
     expect(result).toBe('https://www.threads.net/@testuser/post/abc123')
     expect(fill).toHaveBeenCalledWith('tab1', 'email-input', 'test@example.com')
     expect(fill).toHaveBeenCalledWith('tab1', 'pass-input', 'password123')
+  })
+
+  it('Instagram 계정 선택 버튼으로 로그인 → URL 반환', async () => {
+    vi.mocked(readStore).mockReturnValue([makeAccount()])
+
+    vi.mocked(snapshot)
+      .mockResolvedValueOnce(INSTA_LOGIN_PAGE)  // ensureLoggedIn: Instagram 선택 화면
+      .mockResolvedValueOnce(POST_EDITOR)        // 게시 버튼 탐색
+      .mockResolvedValueOnce(AFTER_PUBLISH)      // extractPublishedUrl
+
+    vi.mocked(waitForRef)
+      .mockResolvedValueOnce('done')             // 로그인 완료 대기
+      .mockResolvedValueOnce('editor-ref')       // 에디터
+
+    const result = await publishPost(makePost())
+
+    expect(evaluate).toHaveBeenCalledWith('tab1', expect.stringContaining('Continue with Instagram'))
+    expect(typeAction).toHaveBeenCalledWith('tab1', 'editor-ref', '테스트 포스트 내용입니다.')
+    expect(result).toBe('https://www.threads.net/@testuser/post/abc123')
   })
 
   it('에디터 waitForRef 타임아웃 → null 반환', async () => {
@@ -239,9 +254,7 @@ describe('publishPost', () => {
       .mockResolvedValueOnce(POST_EDITOR)
       .mockResolvedValueOnce([])  // extractPublishedUrl: 링크 없음
 
-    vi.mocked(waitForRef)
-      .mockResolvedValueOnce('new-post-link')
-      .mockResolvedValueOnce('editor-ref')
+    vi.mocked(waitForRef).mockResolvedValueOnce('editor-ref')
 
     vi.mocked(getText).mockResolvedValueOnce(
       '방문하세요 https://www.threads.net/@testuser/post/xyz789'
@@ -291,7 +304,7 @@ describe('publishReply', () => {
     )
 
     expect(result).toBe(true)
-    expect(fill).toHaveBeenCalledWith('tab1', 'reply-textbox', '멋진 답글입니다!')
+    expect(typeAction).toHaveBeenCalledWith('tab1', 'reply-textbox', '멋진 답글입니다!')
     expect(click).toHaveBeenCalledWith('tab1', 'reply-post-btn')
   })
 
@@ -315,7 +328,7 @@ describe('publishReply', () => {
     )
 
     expect(result).toBe(true)
-    expect(fill).toHaveBeenCalledWith('tab1', 'reply-textbox', '로그인 후 답글')
+    expect(typeAction).toHaveBeenCalledWith('tab1', 'reply-textbox', '로그인 후 답글')
   })
 
   it('에러 발생 → false', async () => {

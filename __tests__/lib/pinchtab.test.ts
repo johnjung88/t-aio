@@ -188,9 +188,9 @@ describe('navigate', () => {
     await navigate('tab1', 'https://example.com/path')
 
     const [url, opts] = mockFetch.mock.calls[0]
-    expect(url).toContain('/tabs/tab1/navigate')
+    expect(url).toContain('/navigate')
     expect(opts.method).toBe('POST')
-    expect(JSON.parse(opts.body)).toEqual({ url: 'https://example.com/path' })
+    expect(JSON.parse(opts.body)).toEqual({ tabId: 'tab1', url: 'https://example.com/path' })
   })
 })
 
@@ -213,6 +213,15 @@ describe('snapshot', () => {
     const result = await snapshot('tab1')
 
     expect(result).toEqual(elements)
+  })
+
+  it('{ nodes: [...] } 래퍼 파싱', async () => {
+    const nodes = [{ ref: 'e4', role: 'button' }]
+    mockFetch.mockResolvedValueOnce(makeResponse({ nodes }))
+
+    const result = await snapshot('tab1')
+
+    expect(result).toEqual(nodes)
   })
 
   it('비정상 응답(not ok)이면 에러 throw', async () => {
