@@ -11,9 +11,7 @@ vi.mock('child_process', () => ({
 // ── Import after mocks ────────────────────────────────────────────────────────
 import {
   ensureServer,
-  ensureProfile,
-  startInstance,
-  openTab,
+  getTabId,
   navigate,
   snapshot,
   click,
@@ -21,7 +19,7 @@ import {
   type as typeAction,
   press,
   waitForRef,
-  getText,
+  evaluate,
 } from '@/lib/pinchtab'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -114,72 +112,31 @@ describe('ensureServer', () => {
   })
 })
 
-// ── ensureProfile ─────────────────────────────────────────────────────────────
+// ── getTabId ──────────────────────────────────────────────────────────────────
 
-describe('ensureProfile', () => {
-  it('기존 프로필이 있으면 해당 id 반환', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse([
-      { id: 'p1', name: 'alice' },
-      { id: 'p2', name: 'bob' },
-    ]))
+describe('getTabId', () => {
+  it('첫 번째 탭 id 반환', async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse({
+      tabs: [
+        { id: 'tab-abc', url: 'https://threads.com', title: 'Threads' },
+      ],
+    }))
 
-    const id = await ensureProfile('alice')
+    const id = await getTabId()
 
-    expect(id).toBe('p1')
-    // POST가 발생하지 않아야 함
-    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(id).toBe('tab-abc')
+    const [url] = mockFetch.mock.calls[0]
+    expect(url).toContain('/tabs')
   })
 
-  it('없으면 POST로 생성 후 새 id 반환', async () => {
-    mockFetch
-      .mockResolvedValueOnce(makeResponse([]))   // GET /profiles
-      .mockResolvedValueOnce(makeResponse({ id: 'newId', name: 'charlie' }))  // POST
+  it('탭이 없으면 에러 throw', async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse({ tabs: [] }))
 
-    const id = await ensureProfile('charlie')
-
-    expect(id).toBe('newId')
-    expect(mockFetch).toHaveBeenCalledTimes(2)
-    const [, postCall] = mockFetch.mock.calls
-    expect(postCall[1]?.method).toBe('POST')
+    await expect(getTabId()).rejects.toThrow('열린 탭 없음')
   })
 })
 
-// ── startInstance ─────────────────────────────────────────────────────────────
-
-describe('startInstance', () => {
-  it('기본 headless 모드 전송', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse({ id: 'inst1' }))
-
-    const id = await startInstance('p1')
-
-    expect(id).toBe('inst1')
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body)
-    expect(body.mode).toBe('headless')
-  })
-
-  it('headed=true이면 headed 모드 전송', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse({ id: 'inst2' }))
-
-    await startInstance('p1', true)
-
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body)
-    expect(body.mode).toBe('headed')
-  })
-})
-
-// ── openTab / navigate ────────────────────────────────────────────────────────
-
-describe('openTab', () => {
-  it('tabId 반환 및 올바른 body 전송', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse({ id: 'tab99' }))
-
-    const tabId = await openTab('inst1', 'https://threads.net')
-
-    expect(tabId).toBe('tab99')
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body)
-    expect(body).toEqual({ instanceId: 'inst1', url: 'https://threads.net' })
-  })
-})
+// ── navigate ──────────────────────────────────────────────────────────────────
 
 describe('navigate', () => {
   it('올바른 경로로 POST', async () => {
@@ -201,7 +158,7 @@ describe('snapshot', () => {
     const elements = [{ ref: 'e1', role: 'button' }, { ref: 'e2', role: 'textbox' }]
     mockFetch.mockResolvedValueOnce(makeResponse(elements))
 
-    const result = await snapshot('tab1')
+    const result = await snapshot()
 
     expect(result).toEqual(elements)
   })
@@ -210,7 +167,7 @@ describe('snapshot', () => {
     const elements = [{ ref: 'e3', role: 'link' }]
     mockFetch.mockResolvedValueOnce(makeResponse({ elements }))
 
-    const result = await snapshot('tab1')
+    const result = await snapshot()
 
     expect(result).toEqual(elements)
   })
@@ -219,34 +176,45 @@ describe('snapshot', () => {
     const nodes = [{ ref: 'e4', role: 'button' }]
     mockFetch.mockResolvedValueOnce(makeResponse({ nodes }))
 
-    const result = await snapshot('tab1')
+    const result = await snapshot()
 
     expect(result).toEqual(nodes)
+  })
+
+  it('tabId 없이 호출됨 (쿼리스트링에 tabId 없음)', async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse([]))
+
+    await snapshot()
+
+    const [url] = mockFetch.mock.calls[0]
+    expect(url).not.toContain('tabId')
+    expect(url).toContain('/snapshot')
   })
 
   it('비정상 응답(not ok)이면 에러 throw', async () => {
     mockFetch.mockResolvedValueOnce(makeResponse(null, false, 500))
 
-    await expect(snapshot('tab1')).rejects.toThrow('snapshot')
+    await expect(snapshot()).rejects.toThrow('snapshot')
   })
 })
 
 // ── click / fill / type / press ───────────────────────────────────────────────
 
 describe('actions', () => {
-  it('click: kind=click과 ref를 전송', async () => {
+  it('click: kind=click과 ref를 전송 (tabId 없음)', async () => {
     mockFetch.mockResolvedValueOnce(makeResponse({}))
 
-    await click('tab1', 'ref-btn')
+    await click('ref-btn')
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body)
     expect(body).toMatchObject({ kind: 'click', ref: 'ref-btn' })
+    expect(body.tabId).toBeUndefined()
   })
 
   it('fill: kind=fill, ref, text를 전송', async () => {
     mockFetch.mockResolvedValueOnce(makeResponse({}))
 
-    await fill('tab1', 'ref-input', 'hello world')
+    await fill('ref-input', 'hello world')
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body)
     expect(body).toMatchObject({ kind: 'fill', ref: 'ref-input', text: 'hello world' })
@@ -255,7 +223,7 @@ describe('actions', () => {
   it('type: kind=type, ref, text를 전송', async () => {
     mockFetch.mockResolvedValueOnce(makeResponse({}))
 
-    await typeAction('tab1', 'ref-area', 'typed text')
+    await typeAction('ref-area', 'typed text')
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body)
     expect(body).toMatchObject({ kind: 'type', ref: 'ref-area', text: 'typed text' })
@@ -264,7 +232,7 @@ describe('actions', () => {
   it('press: kind=press, ref=keyboard, text=key를 전송', async () => {
     mockFetch.mockResolvedValueOnce(makeResponse({}))
 
-    await press('tab1', 'Enter')
+    await press('Enter')
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body)
     expect(body).toMatchObject({ kind: 'press', ref: 'keyboard', text: 'Enter' })
@@ -277,7 +245,7 @@ describe('waitForRef', () => {
   it('첫 스냅샷에서 매치되면 즉시 반환', async () => {
     mockFetch.mockResolvedValueOnce(makeResponse([{ ref: 'r1', role: 'button' }]))
 
-    const ref = await waitForRef('tab1', els => els[0]?.ref ?? null)
+    const ref = await waitForRef(els => els[0]?.ref ?? null)
 
     expect(ref).toBe('r1')
   })
@@ -289,7 +257,7 @@ describe('waitForRef', () => {
       .mockResolvedValueOnce(makeResponse([]))
       .mockResolvedValueOnce(makeResponse([{ ref: 'found' }]))
 
-    const promise = waitForRef('tab1', els => els[0]?.ref ?? null, 15000)
+    const promise = waitForRef(els => els[0]?.ref ?? null, 15000)
     await vi.runAllTimersAsync()
 
     const ref = await promise
@@ -299,7 +267,7 @@ describe('waitForRef', () => {
   it('타임아웃 → 에러 throw', async () => {
     mockFetch.mockResolvedValue(makeResponse([]))
 
-    const promise = waitForRef('tab1', () => null, 1000)
+    const promise = waitForRef(() => null, 1000)
     // Attach rejection handler BEFORE advancing timers to avoid unhandled rejection
     const assertion = expect(promise).rejects.toThrow('waitForRef timeout')
     await vi.runAllTimersAsync()
@@ -307,27 +275,23 @@ describe('waitForRef', () => {
   })
 })
 
-// ── getText ───────────────────────────────────────────────────────────────────
+// ── evaluate ──────────────────────────────────────────────────────────────────
 
-describe('getText', () => {
-  it('{ text: "..." } 응답 파싱', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse({ text: 'page content' }))
+describe('evaluate', () => {
+  it('result 반환', async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse({ result: 'https://threads.com/post/abc' }))
 
-    const text = await getText('tab1')
+    const result = await evaluate(`document.querySelector('a')?.href`)
 
-    expect(text).toBe('page content')
+    expect(result).toBe('https://threads.com/post/abc')
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body)
+    expect(body.tabId).toBeUndefined()
+    expect(body.expression).toContain('href')
   })
 
-  it('문자열 응답 파싱', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve('raw string'),
-      text: () => Promise.resolve('raw string'),
-    } as unknown as Response)
+  it('error 응답이면 에러 throw', async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse({ error: 'SyntaxError' }))
 
-    const text = await getText('tab1')
-
-    expect(text).toBe('raw string')
+    await expect(evaluate('invalid[')).rejects.toThrow('evaluate error')
   })
 })

@@ -54,48 +54,18 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<T> 
   return res.json() as Promise<T>
 }
 
-// ─── Profiles ─────────────────────────────────────────────────────────────────
-
-interface Profile {
-  id: string
-  name: string
-}
-
-export async function ensureProfile(name: string): Promise<string> {
-  const profiles = await api<Profile[]>('GET', '/profiles')
-  const existing = profiles.find(p => p.name === name)
-  if (existing) return existing.id
-
-  const created = await api<Profile>('POST', '/profiles', { name })
-  return created.id
-}
-
-// ─── Instances ────────────────────────────────────────────────────────────────
-
-interface Instance {
-  id: string
-}
-
-export async function startInstance(profileId: string, headed = false): Promise<string> {
-  const inst = await api<Instance>('POST', '/instances/start', {
-    profileId,
-    mode: headed ? 'headed' : 'headless',
-  })
-  return inst.id
-}
-
-export async function stopInstance(instanceId: string): Promise<void> {
-  await fetch(`${BASE}/instances/${instanceId}/stop`, { method: 'POST' }).catch(() => {})
-}
-
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
-interface Tab {
+interface TabInfo {
   id: string
+  url: string
+  title: string
 }
 
-export async function openTab(instanceId: string, url: string): Promise<string> {
-  const tab = await api<Tab>('POST', '/tabs/new', { instanceId, url })
+export async function getTabId(): Promise<string> {
+  const data = await api<{ tabs: TabInfo[] }>('GET', '/tabs')
+  const tab = data.tabs?.[0]
+  if (!tab) throw new Error('[Pinchtab] 열린 탭 없음')
   return tab.id
 }
 
@@ -119,10 +89,8 @@ export interface SnapElement {
   [key: string]: unknown
 }
 
-export async function snapshot(tabId: string): Promise<SnapElement[]> {
-  const res = await fetch(
-    `${BASE}/snapshot?tabId=${encodeURIComponent(tabId)}&filter=interactive&compact=true`
-  )
+export async function snapshot(): Promise<SnapElement[]> {
+  const res = await fetch(`${BASE}/snapshot?filter=interactive&compact=true`)
   if (!res.ok) throw new Error(`[Pinchtab] snapshot → ${res.status}`)
   const data = await res.json() as { nodes?: SnapElement[]; elements?: SnapElement[] } | SnapElement[]
   // API가 { nodes: [...] } 또는 { elements: [...] } 또는 [...] 형태로 반환
@@ -132,32 +100,31 @@ export async function snapshot(tabId: string): Promise<SnapElement[]> {
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
-export async function click(tabId: string, ref: string): Promise<void> {
-  await api('POST', '/action', { tabId, kind: 'click', ref })
+export async function click(ref: string): Promise<void> {
+  await api('POST', '/action', { kind: 'click', ref })
 }
 
-export async function fill(tabId: string, ref: string, text: string): Promise<void> {
-  await api('POST', '/action', { tabId, kind: 'fill', ref, text })
+export async function fill(ref: string, text: string): Promise<void> {
+  await api('POST', '/action', { kind: 'fill', ref, text })
 }
 
-export async function type(tabId: string, ref: string, text: string): Promise<void> {
-  await api('POST', '/action', { tabId, kind: 'type', ref, text })
+export async function type(ref: string, text: string): Promise<void> {
+  await api('POST', '/action', { kind: 'type', ref, text })
 }
 
-export async function press(tabId: string, key: string): Promise<void> {
-  await api('POST', '/action', { tabId, kind: 'press', ref: 'keyboard', text: key })
+export async function press(key: string): Promise<void> {
+  await api('POST', '/action', { kind: 'press', ref: 'keyboard', text: key })
 }
 
 // ─── Wait Helpers ─────────────────────────────────────────────────────────────
 
 export async function waitForRef(
-  tabId: string,
   matcher: (elements: SnapElement[]) => string | null,
   timeoutMs = 15000
 ): Promise<string> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    const elements = await snapshot(tabId)
+    const elements = await snapshot()
     const ref = matcher(elements)
     if (ref) return ref
     await delay(800)
@@ -167,27 +134,8 @@ export async function waitForRef(
 
 // ─── Evaluate ────────────────────────────────────────────────────────────────
 
-export async function evaluate(tabId: string, expression: string): Promise<unknown> {
-  const res = await api<{ result?: unknown; error?: string }>('POST', '/evaluate', { tabId, expression })
+export async function evaluate(expression: string): Promise<unknown> {
+  const res = await api<{ result?: unknown; error?: string }>('POST', '/evaluate', { expression })
   if (res.error) throw new Error(`[Pinchtab] evaluate error: ${res.error}`)
   return res.result
-}
-
-// ─── Text ─────────────────────────────────────────────────────────────────────
-
-export async function getText(tabId: string): Promise<string> {
-  const res = await fetch(`${BASE}/text?tabId=${encodeURIComponent(tabId)}`)
-  if (!res.ok) throw new Error(`[Pinchtab] getText → ${res.status}`)
-  const data = await res.json() as { text?: string } | string
-  return typeof data === 'string' ? data : (data.text ?? '')
-}
-
-// ─── Cookies ──────────────────────────────────────────────────────────────────
-
-export async function getCookies(tabId: string): Promise<object[]> {
-  return api<object[]>('GET', `/tabs/${tabId}/cookies`)
-}
-
-export async function setCookies(tabId: string, cookies: object[]): Promise<void> {
-  await api('POST', `/tabs/${tabId}/cookies`, cookies)
 }
