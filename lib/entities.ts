@@ -1,4 +1,4 @@
-import type { Account, AffiliateProduct, ThreadPost } from '@/lib/types'
+import type { Account, AffiliateProduct, Competitor, EngagementTask, ThreadPost } from '@/lib/types'
 
 function nowIso() {
   return new Date().toISOString()
@@ -35,4 +35,26 @@ export function normalizeProducts(products: AffiliateProduct[]) {
 
 export function normalizeAccounts(accounts: Account[]) {
   return accounts.map(withAccountTimestamps)
+}
+
+export function withEngagementTimestamps(task: EngagementTask): EngagementTask {
+  const now = nowIso()
+  const createdAt = task.createdAt || task.updatedAt || now
+  const updatedAt = task.updatedAt || createdAt
+  return { ...task, createdAt, updatedAt }
+}
+
+export function withCompetitorTimestamps(competitor: Competitor): Competitor {
+  const now = nowIso()
+  const createdAt = competitor.createdAt || competitor.updatedAt || now
+  const updatedAt = competitor.updatedAt || createdAt
+  return { ...competitor, createdAt, updatedAt }
+}
+
+export function normalizeEngagements(tasks: EngagementTask[]) {
+  return tasks.map(withEngagementTimestamps)
+}
+
+export function normalizeCompetitors(competitors: Competitor[]) {
+  return competitors.map(withCompetitorTimestamps)
 }

@@ -1,10 +1,15 @@
-import type { ContentType, PostStatus } from '@/lib/types'
+import type { ContentType, ContentFormat, PostStatus } from '@/lib/types'
 import { z } from '@/lib/zod'
 
 const contentTypeSchema = z.enum(['affiliate', 'informational', 'personal'] as const)
+const contentFormatSchema = z.enum(['hook_opinion', 'question', 'poll', 'tip_value', 'story', 'image_text', 'cta'] as const)
 const postStatusSchema = z.enum(['new', 'hooks_ready', 'draft', 'scheduled', 'published'] as const)
 const hookTypeSchema = z.enum(['empathy_story', 'price_shock', 'comparison', 'social_proof', 'reverse'] as const)
 const affiliatePlatformSchema = z.enum(['coupang', 'naver', 'other'] as const)
+const engagementActionSchema = z.enum(['comment', 'like', 'follow'] as const)
+// Used for type validation reference
+const _engagementStatusSchema = z.enum(['pending', 'completed', 'failed'] as const)
+void _engagementStatusSchema
 
 const threadSchema = z.object({
   main: z.string(),
@@ -23,6 +28,7 @@ const hookAngleSchema = z.object({
 const postPatchSchema = z.object({
   status: postStatusSchema.optional(),
   contentType: contentTypeSchema.optional(),
+  contentFormat: contentFormatSchema.optional(),
   topic: z.string().optional(),
   keywords: z.array(z.string()).optional(),
   account: z.string().optional(),
@@ -76,10 +82,28 @@ const strategySchema = z.object({
   replyCount: z.number().int().min(0).max(3),
   commentDelayMin: z.number().int().min(1),
   commentDelayMax: z.number().int().min(1),
+  // v2: 6레이어 프롬프트 (모두 optional — 하위 호환)
+  persona: z.string().optional(),
+  targetAudience: z.string().optional(),
+  brandVoice: z.string().optional(),
+  contentRules: z.array(z.string()).optional(),
+  platformRules: z.array(z.string()).optional(),
+  examplePosts: z.array(z.string()).optional(),
+  // v2: 스마트 스케줄링
+  weekdayPostCounts: z.array(z.number().int().min(0)).length(7).optional(),
+  // v2: 인게이지먼트
+  engagementEnabled: z.boolean().optional(),
+  dailyCommentTarget: z.number().int().min(0).optional(),
+  dailyLikeTarget: z.number().int().min(0).optional(),
+  dailyFollowTarget: z.number().int().min(0).optional(),
+  engagementKeywords: z.array(z.string()).optional(),
+  // v2: 콘텐츠 포맷 비율
+  contentFormatWeights: z.record(contentFormatSchema, z.number().min(0)).optional(),
 })
 
 export interface PostCreateInput {
   contentType?: ContentType
+  contentFormat?: ContentFormat
   topic?: string
   keywords?: string[]
   account?: string
@@ -149,10 +173,55 @@ export interface StrategyInput {
   replyCount: 0 | 1 | 2 | 3
   commentDelayMin: number
   commentDelayMax: number
+  // v2 optional fields
+  persona?: string
+  targetAudience?: string
+  brandVoice?: string
+  contentRules?: string[]
+  platformRules?: string[]
+  examplePosts?: string[]
+  weekdayPostCounts?: number[]
+  engagementEnabled?: boolean
+  dailyCommentTarget?: number
+  dailyLikeTarget?: number
+  dailyFollowTarget?: number
+  engagementKeywords?: string[]
+  contentFormatWeights?: Partial<Record<ContentFormat, number>>
+}
+
+export interface EngagementCreateInput {
+  accountId: string
+  action: 'comment' | 'like' | 'follow'
+  targetUrl: string
+  targetUsername?: string
+  commentText?: string
+}
+
+export interface EngagementExecuteInput {
+  accountId: string
+  limit?: number
+}
+
+export interface EngagementFindPostsInput {
+  accountId: string
+  keyword: string
+  limit?: number
+}
+
+export interface CompetitorCreateInput {
+  username: string
+  displayName?: string
+  niche: string
+}
+
+export interface PerformanceCollectInput {
+  accountId: string
+  postId?: string
 }
 
 export const postCreateBodySchema = z.object({
   contentType: contentTypeSchema.optional(),
+  contentFormat: contentFormatSchema.optional(),
   topic: z.string().optional(),
   keywords: z.array(z.string()).optional(),
   account: z.string().optional(),
@@ -237,5 +306,58 @@ export function parseStrategyInput(input: StrategyInput): StrategyInput {
     replyCount: input.replyCount,
     commentDelayMin: input.commentDelayMin,
     commentDelayMax: input.commentDelayMax,
+    // v2 fields
+    persona: input.persona,
+    targetAudience: input.targetAudience,
+    brandVoice: input.brandVoice,
+    contentRules: input.contentRules,
+    platformRules: input.platformRules,
+    examplePosts: input.examplePosts,
+    weekdayPostCounts: input.weekdayPostCounts,
+    engagementEnabled: input.engagementEnabled,
+    dailyCommentTarget: input.dailyCommentTarget,
+    dailyLikeTarget: input.dailyLikeTarget,
+    dailyFollowTarget: input.dailyFollowTarget,
+    engagementKeywords: input.engagementKeywords,
+    contentFormatWeights: input.contentFormatWeights,
   }
 }
+
+// v2: 인게이지먼트 스키마
+export const engagementCreateBodySchema = z.object({
+  accountId: z.string().min(1),
+  action: engagementActionSchema,
+  targetUrl: z.string().url(),
+  targetUsername: z.string().optional(),
+  commentText: z.string().optional(),
+})
+
+export const engagementExecuteBodySchema = z.object({
+  accountId: z.string().min(1),
+  limit: z.number().int().min(1).max(50).optional(),
+})
+
+export const engagementFindPostsBodySchema = z.object({
+  accountId: z.string().min(1),
+  keyword: z.string().min(1),
+  limit: z.number().int().min(1).max(20).optional(),
+})
+
+// v2: 경쟁자 스키마
+export const competitorCreateBodySchema = z.object({
+  username: z.string().min(1),
+  displayName: z.string().optional(),
+  niche: z.string().min(1),
+})
+
+export const competitorPatchBodySchema = z.object({
+  displayName: z.string().optional(),
+  niche: z.string().optional(),
+  trackingEnabled: z.boolean().optional(),
+})
+
+// v2: 성과 수집 스키마
+export const performanceCollectBodySchema = z.object({
+  accountId: z.string().min(1),
+  postId: z.string().optional(),
+})

@@ -1,25 +1,93 @@
 // T-AIO — Threads AI Prompt Templates
-// ★ CCG 인사이트 반영: 한국 어필리에이트 성공 패턴 기반 5각도
+// v2: 6레이어 프롬프트 구조 + 콘텐츠 포맷별 지시 + 인게이지먼트 댓글
 
-import type { AffiliateProduct, StrategyConfig } from './types'
+import type { AffiliateProduct, ContentFormat, StrategyConfig } from './types'
+
+// ─── 6레이어 프롬프트 빌더 ──────────────────────────────────────────────────
+
+function buildPromptLayers(strategy: StrategyConfig): string {
+  const layers: string[] = []
+
+  // Layer 1: 페르소나
+  const persona = strategy.persona || strategy.systemPromptBase
+  if (persona) {
+    layers.push(`[Layer 1: 페르소나]\n${persona}`)
+  }
+
+  // Layer 2: 타겟 오디언스
+  if (strategy.targetAudience) {
+    layers.push(`[Layer 2: 타겟 오디언스]\n${strategy.targetAudience}`)
+  }
+
+  // Layer 3: 브랜드 보이스
+  if (strategy.brandVoice) {
+    layers.push(`[Layer 3: 톤 & 보이스]\n${strategy.brandVoice}`)
+  }
+
+  // Layer 4: 콘텐츠 규칙
+  if (strategy.contentRules?.length) {
+    layers.push(`[Layer 4: 콘텐츠 규칙]\n${strategy.contentRules.map(r => `- ${r}`).join('\n')}`)
+  }
+
+  // Layer 5: 플랫폼 규칙
+  if (strategy.platformRules?.length) {
+    layers.push(`[Layer 5: Threads 플랫폼 규칙]\n${strategy.platformRules.map(r => `- ${r}`).join('\n')}`)
+  }
+
+  // Layer 6: 예시 포스트
+  if (strategy.examplePosts?.length) {
+    layers.push(`[Layer 6: 참고 예시]\n${strategy.examplePosts.map((p, i) => `예시${i + 1}: ${p}`).join('\n')}`)
+  }
+
+  // Fallback: 기존 systemPromptBase (Layer 1과 별개로 알고리즘 규칙이 있는 경우)
+  if (strategy.persona && strategy.systemPromptBase) {
+    layers.push(`[Threads 알고리즘 규칙]\n${strategy.systemPromptBase}`)
+  }
+
+  return layers.join('\n\n')
+}
+
+// ─── 콘텐츠 포맷별 지시 ─────────────────────────────────────────────────────
+
+const FORMAT_INSTRUCTIONS: Record<ContentFormat, string> = {
+  hook_opinion: '도발적 의견으로 시작. 강한 주장 → 근거 → 독자에게 의견 묻기. 댓글을 유도하는 구조.',
+  question: '질문으로 끝나는 포스트. 독자의 경험/의견을 물어 댓글을 유발하는 구조.',
+  poll: '투표(폴) 형태. "A vs B 어떤게 더 좋아?" 방식. 4개 이하 선택지 제시.',
+  tip_value: '실용적 팁 제공. 번호 매긴 리스트 형태. 저장/리포스트를 유도하는 실질적 가치.',
+  story: '개인 경험담/실패담으로 시작. 공감 → 교훈 → 독자 행동 유도. 스토리텔링 구조.',
+  image_text: '짧은 캡션 + 핵심 메시지. 이미지와 함께 볼 텍스트. 100자 이내 강렬한 메시지.',
+  cta: '행동 유도 포스트. "저장해두세요", "팔로우 하면 DM" 등 명확한 CTA.',
+}
+
+function getFormatInstruction(format?: ContentFormat): string {
+  if (!format) return ''
+  return `\n[콘텐츠 포맷: ${format}]\n${FORMAT_INSTRUCTIONS[format]}`
+}
+
+// ─── 제품/주제 정보 빌더 ────────────────────────────────────────────────────
+
+function buildProductInfo(product: AffiliateProduct | null, topic: string): string {
+  if (!product) return `주제: ${topic}`
+  return `제품명: ${product.name}
+카테고리: ${product.category}
+가격: ${product.price ? `${product.price.toLocaleString()}원` : '미정'}${product.originalPrice && product.price ? ` (원가 ${product.originalPrice.toLocaleString()}원, ${Math.round((1 - product.price / product.originalPrice) * 100)}% 할인)` : ''}
+설명: ${product.description ?? '없음'}
+키워드: ${product.hookKeywords?.join(', ') ?? '없음'}`
+}
+
+// ─── 후킹 생성 프롬프트 ─────────────────────────────────────────────────────
 
 export function buildHookGenerationPrompt(
   product: AffiliateProduct | null,
   topic: string,
   strategy: StrategyConfig
 ): string {
-  const productInfo = product
-    ? `제품명: ${product.name}
-카테고리: ${product.category}
-가격: ${product.price ? `${product.price.toLocaleString()}원` : '미정'}${product.originalPrice && product.price ? ` (원가 ${product.originalPrice.toLocaleString()}원, ${Math.round((1 - product.price / product.originalPrice) * 100)}% 할인)` : ''}
-설명: ${product.description ?? '없음'}
-키워드: ${product.hookKeywords?.join(', ') ?? '없음'}`
-    : `주제: ${topic}`
+  const layers = buildPromptLayers(strategy)
+  const productInfo = buildProductInfo(product, topic)
 
   return `당신은 한국 스레드(Threads) 어필리에이트 마케팅 전문 카피라이터입니다.
 
-[Threads 알고리즘 규칙]
-${strategy.systemPromptBase}
+${layers}
 
 [제품/주제 정보]
 ${productInfo}
@@ -63,18 +131,24 @@ ${productInfo}
 strength는 예상 후킹 강도 (1~5). 각 angle은 반드시 한국어 구어체로 작성하세요.`
 }
 
+// ─── 대본 생성 프롬프트 ─────────────────────────────────────────────────────
+
 export function buildDraftGenerationPrompt(
   product: AffiliateProduct | null,
   topic: string,
   selectedHook: string,
   replyCount: number,
-  strategy: StrategyConfig
+  strategy: StrategyConfig,
+  contentFormat?: ContentFormat
 ): string {
+  const layers = buildPromptLayers(strategy)
   const productInfo = product
     ? `제품: ${product.name} | ${product.category} | ${product.price ? `${product.price.toLocaleString()}원` : ''}
 설명: ${product.description ?? '없음'}
 어필리에이트 링크: ${product.url}`
     : `주제: ${topic}`
+
+  const formatGuide = getFormatInstruction(contentFormat)
 
   const replyGuides = [
     `"reply1": "핵심 정보 3가지 (이모지 활용, 줄바꿈으로 구분, 200자 이내)"`,
@@ -84,8 +158,8 @@ export function buildDraftGenerationPrompt(
 
   return `당신은 한국 스레드(Threads) 콘텐츠 전문 작가입니다.
 
-[Threads 작성 규칙]
-${strategy.systemPromptBase}
+${layers}
+${formatGuide}
 
 [제품/주제 정보]
 ${productInfo}
@@ -104,5 +178,36 @@ ${selectedHook}
 - 본글에 외부 링크 절대 삽입 금지 (shadowban 방지)
 - 해시태그는 본글 마지막 1개만
 - 자연스러운 구어체 사용, 광고 티 최소화
-- 이모지는 강조용으로만 1~3개`
+- 이모지는 강조용으로만 1~3개
+- 최근 포스트와 유사한 표현/구조 사용 금지`
+}
+
+// ─── 인게이지먼트 댓글 생성 프롬프트 ────────────────────────────────────────
+
+export function buildEngagementCommentPrompt(
+  postText: string,
+  accountNiche: string,
+  strategy: StrategyConfig
+): string {
+  const voice = strategy.brandVoice || '친근한 반말, 자연스러운 한국어'
+
+  return `당신은 Threads에서 ${accountNiche} 분야의 활발한 사용자입니다.
+
+[톤 & 보이스]
+${voice}
+
+[대상 포스트]
+${postText}
+
+위 포스트에 달 자연스러운 댓글을 1개 생성하세요.
+
+규칙:
+- 1~2문장, 50자 이내
+- 자기 홍보/링크/해시태그 절대 금지
+- 진정성 있는 반응 (공감, 질문, 추가 의견 중 택 1)
+- 한국어 구어체, 자연스럽게
+- "좋은 글이네요" 같은 뻔한 댓글 금지
+- 해당 포스트 내용에 구체적으로 반응
+
+댓글 텍스트만 출력하세요 (따옴표, JSON 없이 순수 텍스트만).`
 }

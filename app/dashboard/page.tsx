@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import type { ThreadPost, Account } from '@/lib/types'
+import type { ThreadPost, Account, EngagementTask, PostPerformance, StrategyConfig } from '@/lib/types'
 
 const STATUS_COLS = [
   { key: 'new',         label: '신규',     cls: 'tag-new'       },
@@ -45,11 +45,26 @@ export default function DashboardPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedAccount, setSelectedAccount] = useState('all')
   const [schedulerJobs, setSchedulerJobs] = useState<{ accountId: string }[]>([])
+  const [engagements, setEngagements] = useState<EngagementTask[]>([])
+  const [performance, setPerformance] = useState<PostPerformance[]>([])
+  const [strategy, setStrategy] = useState<StrategyConfig | null>(null)
 
   useEffect(() => {
-    fetch('/api/posts').then((r) => r.json()).then((res) => setPosts(res.data ?? []))
-    fetch('/api/accounts').then((r) => r.json()).then((res) => setAccounts(res.data ?? []))
-    fetch('/api/scheduler').then((r) => r.json()).then((res) => setSchedulerJobs(res.data?.jobs ?? []))
+    Promise.all([
+      fetch('/api/posts').then(r => r.json()),
+      fetch('/api/accounts').then(r => r.json()),
+      fetch('/api/scheduler').then(r => r.json()),
+      fetch('/api/engagement').then(r => r.json()),
+      fetch('/api/performance').then(r => r.json()),
+      fetch('/api/strategy').then(r => r.json()),
+    ]).then(([postsRes, accsRes, schedRes, engRes, perfRes, strRes]) => {
+      setPosts(postsRes.data ?? [])
+      setAccounts(accsRes.data ?? [])
+      setSchedulerJobs(schedRes.data?.jobs ?? [])
+      setEngagements(engRes.data ?? [])
+      setPerformance(perfRes.data ?? [])
+      setStrategy(strRes.data ?? null)
+    }).catch(() => {})
   }, [])
 
   const filtered = selectedAccount === 'all' ? posts : posts.filter((p) => p.account === selectedAccount)
@@ -120,6 +135,79 @@ export default function DashboardPage() {
               )
             })}
           </div>
+        </div>
+      </div>
+
+      {/* v2: Engagement + Performance */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        {/* 인게이지먼트 요약 */}
+        <div className="card">
+          <div className="section-title">💬 오늘 인게이지먼트</div>
+          {(() => {
+            const todayStr = new Date().toISOString().slice(0, 10)
+            const todayEng = engagements.filter(e => e.status === 'completed' && e.createdAt?.startsWith(todayStr))
+            const comments = todayEng.filter(e => e.action === 'comment').length
+            const likes = todayEng.filter(e => e.action === 'like').length
+            const follows = todayEng.filter(e => e.action === 'follow').length
+            const targets = [
+              { label: '댓글', count: comments, target: strategy?.dailyCommentTarget ?? 10, color: 'var(--primary)' },
+              { label: '좋아요', count: likes, target: strategy?.dailyLikeTarget ?? 20, color: 'var(--mint)' },
+              { label: '팔로우', count: follows, target: strategy?.dailyFollowTarget ?? 5, color: 'var(--orange)' },
+            ]
+            return (
+              <div style={{ display: 'flex', gap: 12 }}>
+                {targets.map(({ label, count, target, color }) => (
+                  <div key={label} style={{ flex: 1, textAlign: 'center' }}>
+                    <div style={{ fontSize: 20, fontWeight: 700, color }}>{count}<span style={{ fontSize: 11, color: 'var(--text-m)' }}>/{target}</span></div>
+                    <div style={{ fontSize: 10, color: 'var(--text-m)', marginTop: 2 }}>{label}</div>
+                    <div style={{ height: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 3, marginTop: 4 }}>
+                      <div style={{ height: '100%', width: `${Math.min((count / target) * 100, 100)}%`, background: color, borderRadius: 3 }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+        </div>
+
+        {/* TOP 성과 포스트 */}
+        <div className="card">
+          <div className="section-title">🏆 TOP 성과 포스트</div>
+          {(() => {
+            // 최신 성과 데이터에서 좋아요 기준 상위 3개
+            const postMap = new Map<string, PostPerformance>()
+            for (const p of performance) {
+              const existing = postMap.get(p.postId)
+              if (!existing || p.collectedAt > existing.collectedAt) {
+                postMap.set(p.postId, p)
+              }
+            }
+            const top = Array.from(postMap.values())
+              .sort((a, b) => (b.likes + b.replies + b.reposts) - (a.likes + a.replies + a.reposts))
+              .slice(0, 3)
+
+            if (top.length === 0) {
+              return <div style={{ fontSize: 12, color: 'var(--text-m)' }}>성과 데이터 없음</div>
+            }
+            return top.map((perf, i) => {
+              const post = posts.find(p => p.id === perf.postId)
+              return (
+                <div key={perf.postId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: i < top.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: i === 0 ? 'var(--primary)' : 'var(--text-m)', minWidth: 20 }}>#{i + 1}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {post?.topic ?? perf.postId.slice(0, 8)}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, fontSize: 10, flexShrink: 0 }}>
+                    <span style={{ color: 'var(--primary)' }}>❤ {perf.likes}</span>
+                    <span style={{ color: 'var(--mint)' }}>💬 {perf.replies}</span>
+                    <span style={{ color: 'var(--orange)' }}>🔄 {perf.reposts}</span>
+                  </div>
+                </div>
+              )
+            })
+          })()}
         </div>
       </div>
 

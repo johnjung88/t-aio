@@ -3,11 +3,14 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 const NAV = [
-  { href: '/dashboard', icon: '⬛', label: '대시보드' },
-  { href: '/posts',     icon: '✏️', label: '포스트' },
-  { href: '/products',  icon: '🔗', label: '제품 링크' },
-  { href: '/accounts',  icon: '👤', label: '계정 관리' },
-  { href: '/strategy',  icon: '🧠', label: '전략 설정' },
+  { href: '/dashboard',   icon: '⬛', label: '대시보드' },
+  { href: '/posts',       icon: '✏️', label: '포스트' },
+  { href: '/products',    icon: '🔗', label: '제품 링크' },
+  { href: '/accounts',    icon: '👤', label: '계정 관리' },
+  { href: '/strategy',    icon: '🧠', label: '전략 설정' },
+  { href: '/engagement',  icon: '💬', label: '인게이지먼트' },
+  { href: '/analytics',   icon: '📊', label: '성과 분석' },
+  { href: '/competitors', icon: '🔍', label: '경쟁 분석' },
 ]
 
 export default function Sidebar() {

@@ -6,7 +6,6 @@ import {
   startInstance,
   stopInstance,
   openTab,
-  navigate,
   snapshot,
   click,
   fill,
@@ -18,7 +17,7 @@ import {
 
 // ─── Login Check/Flow ─────────────────────────────────────────────────────────
 
-function findRef(elements: SnapElement[], ...matchers: Array<(e: SnapElement) => boolean>): string | null {
+export function findRef(elements: SnapElement[], ...matchers: Array<(e: SnapElement) => boolean>): string | null {
   for (const matcher of matchers) {
     const found = elements.find(matcher)
     if (found) return found.ref
@@ -26,7 +25,7 @@ function findRef(elements: SnapElement[], ...matchers: Array<(e: SnapElement) =>
   return null
 }
 
-async function ensureLoggedIn(tabId: string, account: Account): Promise<void> {
+export async function ensureLoggedIn(tabId: string, account: Account): Promise<void> {
   const elements = await snapshot(tabId)
 
   const isLoginPage = elements.some(e =>

@@ -65,7 +65,7 @@ export async function ensureProfile(name: string): Promise<string> {
   const existing = list.find(p => p.name === name)
   if (existing) return existing.id
 
-  const created = await api<{ status: string; name: string }>('POST', '/profiles', { name })
+  await api<{ status: string; name: string }>('POST', '/profiles', { name })
   // After creation, fetch the list again to get the id
   const updated = await api<ProfileInfo[]>('GET', '/profiles')
   const profile = updated.find(p => p.name === name)

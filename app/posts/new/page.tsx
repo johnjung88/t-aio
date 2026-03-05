@@ -1,7 +1,18 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { AffiliateProduct, Account, ContentType } from '@/lib/types'
+import type { AffiliateProduct, Account, ContentType, ContentFormat } from '@/lib/types'
+
+const FORMAT_OPTIONS: { value: ContentFormat | ''; label: string }[] = [
+  { value: '', label: '자동 (전략 설정 비율 적용)' },
+  { value: 'hook_opinion', label: '후킹 의견' },
+  { value: 'question', label: '질문형' },
+  { value: 'poll', label: '투표형' },
+  { value: 'tip_value', label: '팁/가치' },
+  { value: 'story', label: '스토리' },
+  { value: 'image_text', label: '이미지+텍스트' },
+  { value: 'cta', label: 'CTA' },
+]
 
 export default function NewPostPage() {
   const router = useRouter()
@@ -9,6 +20,7 @@ export default function NewPostPage() {
   const [products, setProducts] = useState<AffiliateProduct[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [suggested, setSuggested] = useState<AffiliateProduct | null>(null)
+  const [contentFormat, setContentFormat] = useState<ContentFormat | ''>('')
   const [form, setForm] = useState({
     topic: '', affiliateProductId: '', account: '', replyCount: 3, keywords: '',
   })
@@ -45,6 +57,7 @@ export default function NewPostPage() {
         account: form.account,
         keywords: form.keywords.split(',').map((k) => k.trim()).filter(Boolean),
         replyCount: form.replyCount,
+        ...(contentFormat ? { contentFormat } : {}),
       }
       if (contentType === 'affiliate' && form.affiliateProductId) {
         body.affiliateProductId = form.affiliateProductId
@@ -88,6 +101,20 @@ export default function NewPostPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* 콘텐츠 포맷 */}
+        <div className="card">
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>콘텐츠 포맷</div>
+          <select
+            value={contentFormat}
+            onChange={(e) => setContentFormat(e.target.value as ContentFormat | '')}
+            style={{ width: '100%', padding: '0.6rem', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }}
+          >
+            {FORMAT_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
         </div>
 
         {/* 어필리에이트 제품 선택 */}
