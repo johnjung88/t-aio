@@ -18,11 +18,14 @@ import {
   startInstance,
   stopInstance,
   openTab,
+  navigate,
   snapshot,
   click,
+  fill,
   type as typeAction,
   evaluate,
   waitForRef,
+  getText,
   type SnapElement,
 } from '@/lib/pinchtab'
 
@@ -83,8 +86,8 @@ async function loginIfNeeded(tabId: string): Promise<void> {
     const passRef = findRef(els2, e => e.type === 'password')
     if (!passRef) throw new Error('[e2e] 비밀번호 입력창 미발견')
 
-    await (await import('@/lib/pinchtab')).fill(tabId, emailRef, TEST_EMAIL!)
-    await (await import('@/lib/pinchtab')).fill(tabId, passRef, TEST_PASSWORD!)
+    await fill(tabId, emailRef, TEST_EMAIL!)
+    await fill(tabId, passRef, TEST_PASSWORD!)
 
     const els3 = await snapshot(tabId)
     const loginRef = findRef(
@@ -235,7 +238,6 @@ describe('Threads 실제 플로우', () => {
     }
 
     // 포스트 URL로 이동하여 답글 작성
-    const { navigate } = await import('@/lib/pinchtab')
     await navigate(tabId, postLink.href as string)
 
     // 답글 입력창 대기
@@ -263,7 +265,6 @@ describe('Threads 실제 플로우', () => {
     await new Promise(resolve => setTimeout(resolve, 2000))
 
     // 답글이 달린 후 페이지에 답글 텍스트가 있어야 함 (부분 확인)
-    const { getText } = await import('@/lib/pinchtab')
     const pageText = await getText(tabId)
     expect(pageText.length).toBeGreaterThan(0)
   }, 120_000)
