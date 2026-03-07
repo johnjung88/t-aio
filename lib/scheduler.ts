@@ -5,6 +5,7 @@
 
 import cron, { ScheduledTask } from 'node-cron'
 import { readStore, writeStore } from './store'
+import { getStrategy } from './strategy-store'
 import { selectProductForAccount } from './product-selector'
 import { generateJSON } from './ai'
 import { buildHookGenerationPrompt, buildDraftGenerationPrompt } from './prompts'
@@ -48,16 +49,6 @@ function pickContentFormat(strategy: StrategyConfig): ContentFormat | undefined 
   return entries[0]?.[0]
 }
 
-const DEFAULT_STRATEGY: StrategyConfig = {
-  systemPromptBase: '',
-  hookFormulas: [],
-  optimalPostLength: 150,
-  hashtagStrategy: '본글 마지막 1개',
-  bestPostTimes: ['07:30', '20:00'],
-  replyCount: 3,
-  commentDelayMin: 20,
-  commentDelayMax: 90,
-}
 
 // 랜덤 딜레이 생성 (봇 탐지 회피)
 export function randomDelay(minSec: number, maxSec: number): number {
@@ -100,7 +91,7 @@ async function scheduleCommentPost(postId: string, delayMs: number) {
   if (idx === -1) return
 
   const post = posts[idx]
-  const strategy = readStore<StrategyConfig>('strategy', DEFAULT_STRATEGY)
+  const strategy = getStrategy(post.account)
   const replies = [post.thread.reply1, post.thread.reply2, post.thread.reply3].filter(Boolean) as string[]
 
   for (let i = 0; i < replies.length; i++) {
@@ -131,7 +122,7 @@ async function runAutoGen(accountId: string) {
   const account = accounts.find((a) => a.id === accountId)
   if (!account?.autoGenEnabled) return
 
-  const strategy = readStore<StrategyConfig>('strategy', DEFAULT_STRATEGY)
+  const strategy = getStrategy(accountId)
 
   // 스마트 스케줄링: 오늘 이미 생성한 포스트 수 vs 요일별 목표
   const dailyTarget = getDailyPostTarget(strategy, account)

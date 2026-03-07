@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import type { StrategyConfig, ContentFormat } from '@/lib/types'
+import type { Account, StrategyConfig, ContentFormat } from '@/lib/types'
 
 const CONTENT_FORMATS: { key: ContentFormat; label: string }[] = [
   { key: 'hook_opinion', label: '후킹 의견' },
@@ -181,10 +181,24 @@ export default function StrategyPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [selectedAccount, setSelectedAccount] = useState<string>('default')
 
+  // 계정 목록 로드
+  useEffect(() => {
+    fetch('/api/accounts')
+      .then(r => r.json())
+      .then(res => setAccounts(res.data ?? []))
+      .catch(() => {})
+  }, [])
+
+  // 선택된 계정의 전략 로드
   useEffect(() => {
     setLoading(true)
-    fetch('/api/strategy')
+    const url = selectedAccount === 'default'
+      ? '/api/strategy'
+      : `/api/strategy?accountId=${selectedAccount}`
+    fetch(url)
       .then(r => r.json())
       .then(res => {
         const config: StrategyConfig = res.data ?? res
@@ -192,7 +206,7 @@ export default function StrategyPage() {
       })
       .catch(() => setMessage('전략 설정을 불러오지 못했습니다.'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [selectedAccount])
 
   const update = (key: keyof StrategyForm, value: string | boolean) => {
     setForm(prev => ({ ...prev, [key]: value }))
@@ -220,7 +234,10 @@ export default function StrategyPage() {
     setSaving(true)
     setMessage('')
     try {
-      const response = await fetch('/api/strategy', {
+      const url = selectedAccount === 'default'
+        ? '/api/strategy'
+        : `/api/strategy?accountId=${selectedAccount}`
+      const response = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(parsed.data),
@@ -228,7 +245,10 @@ export default function StrategyPage() {
       if (!response.ok) { setMessage('저장에 실패했습니다.'); return }
       const res = await response.json()
       setForm(toForm(res.data ?? res))
-      setMessage('설정이 저장되었습니다')
+      const label = selectedAccount === 'default'
+        ? '기본값'
+        : (accounts.find(a => a.id === selectedAccount)?.displayName ?? selectedAccount)
+      setMessage(`${label} 전략이 저장되었습니다`)
     } catch {
       setMessage('저장 중 오류가 발생했습니다.')
     } finally {
@@ -240,9 +260,24 @@ export default function StrategyPage() {
 
   return (
     <div style={{ maxWidth: 920, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>전략 설정</h1>
-        <p style={{ fontSize: 13, color: 'var(--text-s)' }}>6레이어 프롬프트, 콘텐츠 규칙, 인게이지먼트, 스케줄링을 설정합니다.</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>전략 설정</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-s)' }}>6레이어 프롬프트, 콘텐츠 규칙, 인게이지먼트, 스케줄링을 설정합니다.</p>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 200 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-s)' }}>계정별 전략</div>
+          <select
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', fontSize: 13 }}
+            value={selectedAccount}
+            onChange={e => { setSelectedAccount(e.target.value); setMessage('') }}
+          >
+            <option value="default">기본값 (공통)</option>
+            {accounts.map(a => (
+              <option key={a.id} value={a.id}>{a.displayName || a.username}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* ── 6-Layer 프롬프트 ── */}

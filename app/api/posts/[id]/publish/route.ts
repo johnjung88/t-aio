@@ -2,8 +2,9 @@ import { NextRequest } from 'next/server'
 import { fail, ok } from '@/lib/api'
 import { readStore, writeStore } from '@/lib/store'
 import { randomDelay } from '@/lib/scheduler'
+import { getStrategy } from '@/lib/strategy-store'
 import { publishPost, publishReply } from '@/lib/threads-bot'
-import type { StrategyConfig, ThreadPost } from '@/lib/types'
+import type { ThreadPost } from '@/lib/types'
 
 // 브라우저 자동화 + 댓글 딜레이로 최대 5분 소요 가능
 export const maxDuration = 300
@@ -60,7 +61,7 @@ export async function POST(_req: NextRequest, { params }: Context) {
   }
 
   // ── 댓글 순차 발행 (랜덤 딜레이 포함) ──────────────────────────────────────
-  const strategy = readStore<StrategyConfig>('strategy', {} as StrategyConfig)
+  const strategy = getStrategy(post.account)
   const postWithUrl: ThreadPost = { ...post, publishedUrl }
   const replies = [post.thread.reply1, post.thread.reply2, post.thread.reply3].filter(
     Boolean

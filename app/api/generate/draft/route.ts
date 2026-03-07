@@ -5,18 +5,8 @@ import { generateDraftBodySchema, type GenerateDraftInput } from '@/lib/schemas'
 import { generateJSON } from '@/lib/ai'
 import { buildDraftGenerationPrompt } from '@/lib/prompts'
 import { readStore, writeStore } from '@/lib/store'
-import type { AffiliateProduct, StrategyConfig, ThreadPost } from '@/lib/types'
-
-const DEFAULT_STRATEGY: StrategyConfig = {
-  systemPromptBase: '',
-  hookFormulas: [],
-  optimalPostLength: 150,
-  hashtagStrategy: '본글 마지막 1개',
-  bestPostTimes: ['07:30', '20:00'],
-  replyCount: 3,
-  commentDelayMin: 20,
-  commentDelayMax: 90,
-}
+import { getStrategy } from '@/lib/strategy-store'
+import type { AffiliateProduct, ThreadPost } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
   const rawBody: unknown = await req.json()
@@ -32,7 +22,7 @@ export async function POST(req: NextRequest) {
   if (!post) return fail('Post not found', 404, 'NOT_FOUND')
   if (!post.selectedHook) return fail('No hook selected', 400, 'INVALID_POST_STATE')
 
-  const strategy = readStore<StrategyConfig>('strategy', DEFAULT_STRATEGY)
+  const strategy = getStrategy(post.account)
   let product: AffiliateProduct | null = null
   if (post.affiliateProductId) {
     product = readStore<AffiliateProduct[]>('affiliates', []).find((item) => item.id === post.affiliateProductId) ?? null
