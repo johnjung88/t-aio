@@ -25,6 +25,8 @@ export default function PublishPage({ params }: { params: { id: string } }) {
   const [copied, setCopied] = useState<CopyKey | ''>('')
   const [message, setMessage] = useState('')
   const [completed, setCompleted] = useState(false)
+  const [autoPublishing, setAutoPublishing] = useState(false)
+  const [publishStep, setPublishStep] = useState('')
 
   useEffect(() => {
     setLoading(true)
@@ -97,6 +99,39 @@ export default function PublishPage({ params }: { params: { id: string } }) {
     }
   }
 
+  const autoPublish = async () => {
+    if (!post) return
+    setAutoPublishing(true)
+    setMessage('')
+    setPublishStep('본글 발행 중...')
+
+    try {
+      const res = await fetch(`/api/posts/${post.id}/publish`, { method: 'POST' })
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        setMessage(data?.error?.message ?? '자동 발행에 실패했습니다.')
+        setPublishStep('')
+        return
+      }
+
+      const { post: updatedPost, publishedUrl: url, repliesPublished, repliesTotal } = data.data
+      setPost(updatedPost)
+      setPublishedUrl(url ?? '')
+      setCompleted(true)
+      setMessage(
+        repliesTotal > 0
+          ? `자동 발행 완료! 댓글 ${repliesPublished}/${repliesTotal}개 발행됨.`
+          : '자동 발행 완료!'
+      )
+    } catch {
+      setMessage('자동 발행 중 오류가 발생했습니다. Pinchtab 서버가 실행 중인지 확인하세요.')
+    } finally {
+      setAutoPublishing(false)
+      setPublishStep('')
+    }
+  }
+
   if (loading) return <div className="card">불러오는 중...</div>
   if (!post) return <div className="card">포스트를 찾을 수 없습니다.</div>
 
@@ -141,9 +176,21 @@ export default function PublishPage({ params }: { params: { id: string } }) {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <button className="btn btn-primary" onClick={completePublish} disabled={finishing}>
-          {finishing ? '처리 중...' : '발행 완료'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {(post.status === 'draft' || post.status === 'scheduled') && (
+            <button
+              className="btn"
+              onClick={autoPublish}
+              disabled={autoPublishing || finishing}
+              style={{ background: 'var(--mint)', color: '#0F1729', fontWeight: 700 }}
+            >
+              {autoPublishing ? (publishStep || '자동 발행 중...') : '자동 발행'}
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={completePublish} disabled={finishing || autoPublishing}>
+            {finishing ? '처리 중...' : '발행 완료'}
+          </button>
+        </div>
         <Link href="/posts" className="btn btn-ghost">포스트 목록으로 →</Link>
       </div>
 

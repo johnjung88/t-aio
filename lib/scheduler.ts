@@ -60,7 +60,7 @@ const DEFAULT_STRATEGY: StrategyConfig = {
 }
 
 // 랜덤 딜레이 생성 (봇 탐지 회피)
-function randomDelay(minSec: number, maxSec: number): number {
+export function randomDelay(minSec: number, maxSec: number): number {
   return Math.floor(Math.random() * (maxSec - minSec + 1) + minSec) * 1000
 }
 
