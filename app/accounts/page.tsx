@@ -110,8 +110,8 @@ export default function AccountsPage() {
                   </select>
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.3rem' }}>이메일</label>
-                  <input type="email" value={form.loginEmail} onChange={(e) => setForm({ ...form, loginEmail: e.target.value })} placeholder="example@gmail.com"
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.3rem' }}>아이디 (username)</label>
+                  <input type="text" value={form.loginEmail} onChange={(e) => setForm({ ...form, loginEmail: e.target.value })} placeholder="instagram_username"
                     style={{ width: '100%', padding: '0.6rem 0.75rem', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }} />
                 </div>
                 <div>
@@ -206,8 +206,8 @@ export default function AccountsPage() {
                         </select>
                       </div>
                       <div>
-                        <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>이메일</label>
-                        <input type="email" value={editLoginForm.loginEmail} onChange={(e) => setEditLoginForm({ ...editLoginForm, loginEmail: e.target.value })} placeholder="email@example.com"
+                        <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>아이디 (username)</label>
+                        <input type="text" value={editLoginForm.loginEmail} onChange={(e) => setEditLoginForm({ ...editLoginForm, loginEmail: e.target.value })} placeholder="instagram_username"
                           style={{ width: '100%', padding: '0.5rem', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text)', fontSize: '0.82rem' }} />
                       </div>
                       <div>

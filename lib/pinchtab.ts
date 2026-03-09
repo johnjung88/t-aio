@@ -1,116 +1,128 @@
-import { spawn } from 'child_process'
+import { chromium, Browser, BrowserContext, Page } from 'playwright'
+import * as fs from 'fs'
+import * as path from 'path'
 
-const BASE = process.env.PINCHTAB_URL ?? 'http://127.0.0.1:9867'
+// ─── State ────────────────────────────────────────────────────────────────────
 
-// ─── Internal Helpers ─────────────────────────────────────────────────────────
+let browser: Browser | null = null
+const contexts = new Map<string, BrowserContext>()
+const pages = new Map<string, Page>()
+let tabSeq = 0
 
 function delay(ms: number) {
   return new Promise<void>(resolve => setTimeout(resolve, ms))
 }
 
-async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`[Pinchtab] ${method} ${path} → ${res.status}: ${text}`)
-  }
-  return res.json() as Promise<T>
+function sessionPath(profileName: string): string {
+  const dir = path.join(process.cwd(), 'data', 'sessions')
+  fs.mkdirSync(dir, { recursive: true })
+  return path.join(dir, `${profileName}.json`)
 }
 
-// ─── Server Management ───────────────────────────────────────────────────────
+// ─── Browser / Context ───────────────────────────────────────────────────────
 
-async function isServerRunning(): Promise<boolean> {
-  try {
-    const res = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(2000) })
-    return res.ok
-  } catch {
-    return false
+async function getBrowser(): Promise<Browser> {
+  if (!browser?.isConnected()) {
+    browser = await chromium.launch({
+      headless: false,
+      args: ['--disable-blink-features=AutomationControlled'],
+    })
   }
+  return browser
 }
 
-export async function ensureServer(): Promise<void> {
-  if (await isServerRunning()) return
+async function getContext(profileName: string): Promise<BrowserContext> {
+  const existing = contexts.get(profileName)
+  if (existing) return existing
 
-  console.log('[Pinchtab] 서버 시작 중...')
-  const child = spawn('pinchtab', [], {
-    detached: true,
-    stdio: 'ignore',
-    shell: true,
+  const b = await getBrowser()
+  const sp = sessionPath(profileName)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let storageState: any
+  if (fs.existsSync(sp)) {
+    try { storageState = JSON.parse(fs.readFileSync(sp, 'utf-8')) } catch {}
+  }
+
+  const ctx = await b.newContext({
+    storageState,
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    viewport: { width: 1280, height: 800 },
   })
-  child.unref()
 
-  for (let i = 0; i < 20; i++) {
-    await delay(500)
-    if (await isServerRunning()) {
-      console.log('[Pinchtab] 서버 준비 완료')
-      return
+  // 페이지 로드 전 anti-detection 주입
+  await ctx.addInitScript(`
+    Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
+    if (!navigator.userAgentData) {
+      Object.defineProperty(navigator, 'userAgentData', {
+        get: () => ({
+          brands: [{ brand: 'Chromium', version: '120' }, { brand: 'Google Chrome', version: '120' }],
+          mobile: false, platform: 'Windows',
+        }),
+        configurable: true,
+      });
     }
-  }
-  throw new Error('[Pinchtab] 서버 시작 실패 (10초 초과)')
+  `)
+
+  contexts.set(profileName, ctx)
+  return ctx
 }
 
-// ─── Profiles ────────────────────────────────────────────────────────────────
+// ─── Server Management (no-op — Playwright is embedded) ──────────────────────
 
-interface ProfileInfo {
-  id: string
-  name: string
-}
+export async function ensureServer(): Promise<void> {}
+
+// ─── Profiles / Instances ────────────────────────────────────────────────────
 
 export async function ensureProfile(name: string): Promise<string> {
-  const list = await api<ProfileInfo[]>('GET', '/profiles')
-  const existing = list.find(p => p.name === name)
-  if (existing) return existing.id
-
-  await api<{ status: string; name: string }>('POST', '/profiles', { name })
-  // After creation, fetch the list again to get the id
-  const updated = await api<ProfileInfo[]>('GET', '/profiles')
-  const profile = updated.find(p => p.name === name)
-  if (!profile) throw new Error(`[Pinchtab] 프로필 생성 실패: ${name}`)
-  return profile.id
+  return name
 }
 
-// ─── Instances ───────────────────────────────────────────────────────────────
-
-interface InstanceInfo {
-  id: string
-  profileId: string
-  profileName: string
-  port: number
-  headless: boolean
-  status: string
-  startTime: string
-}
-
-export async function startInstance(profileId: string, headless = true): Promise<string> {
-  const mode = headless ? 'headless' : 'headed'
-  const instance = await api<InstanceInfo>('POST', '/instances/start', { profileId, mode })
-  return instance.id
+export async function startInstance(profileName: string): Promise<string> {
+  await getContext(profileName)
+  return profileName
 }
 
 export async function stopInstance(instanceId: string): Promise<void> {
-  await api('POST', `/instances/${instanceId}/stop`)
+  const ctx = contexts.get(instanceId)
+  if (!ctx) return
+  try {
+    const state = await ctx.storageState()
+    fs.writeFileSync(sessionPath(instanceId), JSON.stringify(state))
+  } catch {}
 }
 
-// ─── Tabs ────────────────────────────────────────────────────────────────────
+// ─── Tabs ─────────────────────────────────────────────────────────────────────
 
 export async function openTab(instanceId: string, url?: string): Promise<string> {
-  const result = await api<{ tabId: string }>('POST', `/instances/${instanceId}/tabs/open`, url ? { url } : undefined)
-  return result.tabId
+  const ctx = await getContext(instanceId)
+  const page = await ctx.newPage()
+  const tabId = `tab_${++tabSeq}`
+  pages.set(tabId, page)
+
+  if (url) {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await delay(2000)
+  }
+
+  return tabId
 }
 
 export async function closeTab(tabId: string): Promise<void> {
-  await api('POST', `/tabs/${tabId}/close`)
+  const page = pages.get(tabId)
+  if (page) {
+    await page.close().catch(() => {})
+    pages.delete(tabId)
+  }
 }
 
 export async function navigate(tabId: string, url: string): Promise<void> {
-  await api('POST', `/tabs/${tabId}/navigate`, { url })
+  const page = pages.get(tabId)
+  if (!page) throw new Error(`[Playwright] Tab not found: ${tabId}`)
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
 }
 
-// ─── Snapshot / Elements ────────────────────────────────────────────────────
+// ─── Snapshot / Elements ─────────────────────────────────────────────────────
 
 export interface SnapElement {
   ref: string
@@ -127,32 +139,66 @@ export interface SnapElement {
 }
 
 export async function snapshot(tabId: string): Promise<SnapElement[]> {
-  const res = await fetch(`${BASE}/tabs/${tabId}/snapshot?interactive=true&compact=true`)
-  if (!res.ok) throw new Error(`[Pinchtab] snapshot → ${res.status}`)
-  const data = await res.json() as { nodes?: SnapElement[]; elements?: SnapElement[] } | SnapElement[]
-  if (Array.isArray(data)) return data
-  return data.nodes ?? data.elements ?? []
+  const page = pages.get(tabId)
+  if (!page) throw new Error(`[Playwright] Tab not found: ${tabId}`)
+
+  return page.evaluate(() => {
+    const selector = [
+      'a[href]', 'button', 'input', 'textarea', 'select',
+      '[role="button"]', '[role="textbox"]', '[role="link"]',
+      '[role="checkbox"]', '[role="radio"]', '[role="combobox"]',
+    ].join(',')
+
+    const els = Array.from(document.querySelectorAll<HTMLElement>(selector))
+    return els.map((el, i) => {
+      const ref = `e${i + 1}`
+      el.dataset.ptref = ref
+      const tag = el.tagName.toLowerCase()
+      const role = el.getAttribute('role')
+        ?? (tag === 'a' ? 'link' : tag === 'button' ? 'button' : (tag === 'input' || tag === 'textarea') ? 'textbox' : undefined)
+      return {
+        ref,
+        role,
+        name: (el.getAttribute('aria-label') || el.innerText?.trim())?.slice(0, 100),
+        tag,
+        type: (el as HTMLInputElement).type || undefined,
+        text: el.innerText?.trim()?.slice(0, 200),
+        placeholder: (el as HTMLInputElement).placeholder || undefined,
+        href: (el as HTMLAnchorElement).href || undefined,
+        disabled: (el as HTMLButtonElement).disabled || undefined,
+        checked: (el as HTMLInputElement).checked ?? undefined,
+      }
+    })
+  }) as Promise<SnapElement[]>
 }
 
-// ─── Actions ────────────────────────────────────────────────────────────────
+// ─── Actions ──────────────────────────────────────────────────────────────────
 
 export async function click(tabId: string, ref: string): Promise<void> {
-  await api('POST', `/tabs/${tabId}/action`, { kind: 'click', ref })
+  const page = pages.get(tabId)
+  if (!page) throw new Error(`[Playwright] Tab not found: ${tabId}`)
+  await page.locator(`[data-ptref="${ref}"]`).click({ timeout: 10000 })
 }
 
 export async function fill(tabId: string, ref: string, text: string): Promise<void> {
-  await api('POST', `/tabs/${tabId}/action`, { kind: 'fill', ref, text })
+  const page = pages.get(tabId)
+  if (!page) throw new Error(`[Playwright] Tab not found: ${tabId}`)
+  await page.locator(`[data-ptref="${ref}"]`).fill(text, { timeout: 10000 })
 }
 
 export async function type(tabId: string, ref: string, text: string): Promise<void> {
-  await api('POST', `/tabs/${tabId}/action`, { kind: 'type', ref, text })
+  const page = pages.get(tabId)
+  if (!page) throw new Error(`[Playwright] Tab not found: ${tabId}`)
+  await page.locator(`[data-ptref="${ref}"]`).pressSequentially(text, { delay: 50 })
 }
 
 export async function press(tabId: string, key: string): Promise<void> {
-  await api('POST', `/tabs/${tabId}/action`, { kind: 'press', ref: 'keyboard', text: key })
+  const page = pages.get(tabId)
+  if (!page) throw new Error(`[Playwright] Tab not found: ${tabId}`)
+  await page.keyboard.press(key)
 }
 
-// ─── Wait Helpers ───────────────────────────────────────────────────────────
+// ─── Wait Helpers ─────────────────────────────────────────────────────────────
 
 export async function waitForRef(
   tabId: string,
@@ -166,19 +212,19 @@ export async function waitForRef(
     if (ref) return ref
     await delay(800)
   }
-  throw new Error(`[Pinchtab] waitForRef timeout (${timeoutMs}ms)`)
+  throw new Error(`[Playwright] waitForRef timeout (${timeoutMs}ms)`)
 }
 
-// ─── Evaluate / Text ────────────────────────────────────────────────────────
+// ─── Evaluate ─────────────────────────────────────────────────────────────────
 
 export async function evaluate(tabId: string, expression: string): Promise<unknown> {
-  const res = await api<{ result?: unknown; error?: string }>('POST', `/tabs/${tabId}/evaluate`, { expression })
-  if (res.error) throw new Error(`[Pinchtab] evaluate error: ${res.error}`)
-  return res.result
+  const page = pages.get(tabId)
+  if (!page) throw new Error(`[Playwright] Tab not found: ${tabId}`)
+  return page.evaluate(expression)
 }
 
 export async function getText(tabId: string): Promise<string> {
-  const res = await fetch(`${BASE}/tabs/${tabId}/text`)
-  if (!res.ok) throw new Error(`[Pinchtab] getText → ${res.status}`)
-  return res.text()
+  const page = pages.get(tabId)
+  if (!page) throw new Error(`[Playwright] Tab not found: ${tabId}`)
+  return page.innerText('body').catch(() => '')
 }
