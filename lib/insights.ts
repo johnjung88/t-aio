@@ -14,7 +14,7 @@ export interface StrategyInsights {
 
 // score = likes×2 + replies×3 + reposts×4
 function calcScore(perf: { likes: number; replies: number; reposts: number }): number {
-  return perf.likes * 2 + perf.replies * 3 + perf.reposts * 4
+  return (perf.likes ?? 0) * 2 + (perf.replies ?? 0) * 3 + (perf.reposts ?? 0) * 4
 }
 
 export function computeInsights(accountId: string): void {

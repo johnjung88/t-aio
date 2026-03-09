@@ -6,7 +6,7 @@
 import cron, { ScheduledTask } from 'node-cron'
 import { readStore, writeStore } from './store'
 import { getStrategy } from './strategy-store'
-import { computeInsights } from './insights'
+import { computeInsights, loadInsights } from './insights'
 import { selectProductForAccount } from './product-selector'
 import { generateJSON } from './ai'
 import { buildHookGenerationPrompt, buildDraftGenerationPrompt } from './prompts'
@@ -140,8 +140,10 @@ async function runAutoGen(accountId: string) {
   const product = selectProductForAccount(account)
   const contentFormat = pickContentFormat(strategy)
 
+  const insights = loadInsights(accountId)
+
   // 후킹 생성
-  const hookPrompt = buildHookGenerationPrompt(product, '오늘의 추천 제품', strategy)
+  const hookPrompt = buildHookGenerationPrompt(product, '오늘의 추천 제품', strategy, insights)
   let hooks: HookAngle[]
   try {
     hooks = await generateJSON<HookAngle[]>(hookPrompt)
@@ -154,7 +156,7 @@ async function runAutoGen(accountId: string) {
 
   // 대본 생성 (콘텐츠 포맷 반영)
   const draftPrompt = buildDraftGenerationPrompt(
-    product, '오늘의 추천 제품', best.angle, strategy.replyCount ?? 3, strategy, contentFormat
+    product, '오늘의 추천 제품', best.angle, strategy.replyCount ?? 3, strategy, contentFormat, insights
   )
   let draft: { main: string; reply1?: string; reply2?: string; reply3?: string }
   try {
