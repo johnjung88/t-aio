@@ -375,6 +375,10 @@ async function runEngagementAutoGen(accountId: string) {
   }
 
   // 댓글 자동 생성
+  const MAX_AI_CALLS = 5
+  let aiCallCount = 0
+  let commentsCreated = 0
+
   if (todayComments < commentTarget) {
     const keyword = keywords[Math.floor(Math.random() * keywords.length)]
     try {
@@ -387,14 +391,22 @@ async function runEngagementAutoGen(accountId: string) {
         const findData = await findRes.json()
         const foundPosts: Array<{ url: string; text: string }> = findData.data ?? []
         for (const foundPost of foundPosts.slice(0, commentTarget - todayComments)) {
+          if (todayComments + commentsCreated >= commentTarget) break
+          if (aiCallCount >= MAX_AI_CALLS) break
+          aiCallCount++
           const commentText = await generateText(
             buildEngagementCommentPrompt(foundPost.text, account.niche ?? '', strategy)
           )
-          await fetch('http://localhost:4000/api/engagement', {
+          const createRes = await fetch('http://localhost:4000/api/engagement', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ accountId, action: 'comment', targetUrl: foundPost.url, commentText }),
           })
+          if (!createRes.ok) {
+            console.warn(`[Scheduler] 인게이지먼트 태스크 생성 실패: ${foundPost.url}`)
+          } else {
+            commentsCreated++
+          }
         }
       }
     } catch (err) {
@@ -403,6 +415,8 @@ async function runEngagementAutoGen(accountId: string) {
   }
 
   // 좋아요 자동 생성
+  let likesCreated = 0
+
   if (todayLikes < likeTarget) {
     const keyword = keywords[Math.floor(Math.random() * keywords.length)]
     try {
@@ -414,12 +428,18 @@ async function runEngagementAutoGen(accountId: string) {
       if (findRes.ok) {
         const findData = await findRes.json()
         const foundPosts: Array<{ url: string; text: string }> = findData.data ?? []
-        for (const foundPost of foundPosts) {
-          await fetch('http://localhost:4000/api/engagement', {
+        for (const foundPost of foundPosts.slice(0, likeTarget - todayLikes)) {
+          if (todayLikes + likesCreated >= likeTarget) break
+          const createRes = await fetch('http://localhost:4000/api/engagement', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ accountId, action: 'like', targetUrl: foundPost.url }),
           })
+          if (!createRes.ok) {
+            console.warn(`[Scheduler] 인게이지먼트 태스크 생성 실패: ${foundPost.url}`)
+          } else {
+            likesCreated++
+          }
         }
       }
     } catch (err) {
