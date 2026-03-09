@@ -275,7 +275,7 @@ export function getStatus() {
 export function syncWithAccounts() {
   const accounts = readStore<Account[]>('accounts', [])
   for (const account of accounts) {
-    if (account.autoGenEnabled) startJob(account.id, account.autoGenTime)
+    if (account.autoGenEnabled && account.autoGenTime) startJob(account.id, account.autoGenTime)
     else stopJob(account.id)
   }
 }

@@ -3,7 +3,11 @@ export async function register() {
     const { syncWithAccounts } = await import('./lib/scheduler')
     setTimeout(() => {
       console.log('[Instrumentation] Autopilot 작업 복구 시작...')
-      syncWithAccounts()
+      try {
+        syncWithAccounts()
+      } catch (err) {
+        console.error('[Instrumentation] 스케줄러 복구 실패:', err)
+      }
     }, 3000)
   }
 }
