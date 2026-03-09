@@ -2,6 +2,7 @@
 // v2: 6레이어 프롬프트 구조 + 콘텐츠 포맷별 지시 + 인게이지먼트 댓글
 
 import type { AffiliateProduct, ContentFormat, StrategyConfig } from './types'
+import type { StrategyInsights } from './insights'
 
 // ─── 6레이어 프롬프트 빌더 ──────────────────────────────────────────────────
 
@@ -80,14 +81,16 @@ function buildProductInfo(product: AffiliateProduct | null, topic: string): stri
 export function buildHookGenerationPrompt(
   product: AffiliateProduct | null,
   topic: string,
-  strategy: StrategyConfig
+  strategy: StrategyConfig,
+  insights?: StrategyInsights | null
 ): string {
   const layers = buildPromptLayers(strategy)
+  const layer7 = buildInsightsLayer(insights)
   const productInfo = buildProductInfo(product, topic)
 
   return `당신은 한국 스레드(Threads) 어필리에이트 마케팅 전문 카피라이터입니다.
 
-${layers}
+${layers}${layer7}
 
 [제품/주제 정보]
 ${productInfo}
@@ -139,9 +142,11 @@ export function buildDraftGenerationPrompt(
   selectedHook: string,
   replyCount: number,
   strategy: StrategyConfig,
-  contentFormat?: ContentFormat
+  contentFormat?: ContentFormat,
+  insights?: StrategyInsights | null
 ): string {
   const layers = buildPromptLayers(strategy)
+  const layer7 = buildInsightsLayer(insights)
   const productInfo = product
     ? `제품: ${product.name} | ${product.category} | ${product.price ? `${product.price.toLocaleString()}원` : ''}
 설명: ${product.description ?? '없음'}
@@ -158,7 +163,7 @@ export function buildDraftGenerationPrompt(
 
   return `당신은 한국 스레드(Threads) 콘텐츠 전문 작가입니다.
 
-${layers}
+${layers}${layer7}
 ${formatGuide}
 
 [제품/주제 정보]
@@ -180,6 +185,33 @@ ${selectedHook}
 - 자연스러운 구어체 사용, 광고 티 최소화
 - 이모지는 강조용으로만 1~3개
 - 최근 포스트와 유사한 표현/구조 사용 금지`
+}
+
+// ─── Layer 7: 성과 기반 학습 헬퍼 ───────────────────────────────────────────
+
+function buildInsightsLayer(insights?: StrategyInsights | null): string {
+  if (!insights || insights.dataPoints < 5) return ''
+
+  const lines: string[] = []
+  lines.push(`\n\n[Layer 7: 성과 기반 학습 — ${insights.dataPoints}개 포스트 분석]`)
+
+  if (insights.topHookTypes.length) {
+    const best = insights.topHookTypes[0]
+    lines.push(`- 최고 성과 훅 타입: ${best.type} (평균 점수 ${best.avgScore}, ${best.count}회)`)
+  }
+  if (insights.topContentFormats.length) {
+    const best = insights.topContentFormats[0]
+    lines.push(`- 최고 성과 포맷: ${best.format} (평균 점수 ${best.avgScore})`)
+  }
+  if (insights.topPosts.length) {
+    lines.push(`- 상위 포스트 예시:`)
+    for (const p of insights.topPosts) {
+      lines.push(`  "${p.text}"`)
+    }
+  }
+  lines.push(`→ 위 패턴을 우선 활용하되, 단조롭지 않게 변형할 것`)
+
+  return lines.join('\n')
 }
 
 // ─── 인게이지먼트 댓글 생성 프롬프트 ────────────────────────────────────────
