@@ -11,8 +11,10 @@ vi.mock('@/lib/store', () => ({
 
 vi.mock('@/lib/pinchtab', () => ({
   ensureServer: vi.fn(),
-  getTabId: vi.fn(),
-  navigate: vi.fn(),
+  ensureProfile: vi.fn(),
+  startInstance: vi.fn(),
+  stopInstance: vi.fn(),
+  openTab: vi.fn(),
   snapshot: vi.fn(),
   click: vi.fn(),
   fill: vi.fn(),
@@ -24,8 +26,10 @@ vi.mock('@/lib/pinchtab', () => ({
 import { readStore } from '@/lib/store'
 import {
   ensureServer,
-  getTabId,
-  navigate,
+  ensureProfile,
+  startInstance,
+  stopInstance,
+  openTab,
   snapshot,
   click,
   fill,
@@ -103,8 +107,10 @@ beforeEach(() => {
   vi.useFakeTimers()
   vi.resetAllMocks()
   vi.mocked(ensureServer).mockResolvedValue(undefined)
-  vi.mocked(getTabId).mockResolvedValue('tab1')
-  vi.mocked(navigate).mockResolvedValue(undefined)
+  vi.mocked(ensureProfile).mockResolvedValue('testuser')
+  vi.mocked(startInstance).mockResolvedValue('testuser')
+  vi.mocked(openTab).mockResolvedValue('tab1')
+  vi.mocked(stopInstance).mockResolvedValue(undefined)
   vi.mocked(click).mockResolvedValue(undefined)
   vi.mocked(fill).mockResolvedValue(undefined)
   vi.mocked(typeAction).mockResolvedValue(undefined)
@@ -148,10 +154,10 @@ describe('publishPost', () => {
     const result = await promise
 
     expect(result).toBe('https://www.threads.net/@testuser/post/abc123')
-    expect(navigate).toHaveBeenCalledWith('tab1', 'https://www.threads.com')
-    expect(typeAction).toHaveBeenCalledWith('editor-ref', '테스트 포스트 내용입니다.')
-    expect(evaluate).toHaveBeenCalledWith(expect.stringContaining('Create'))
-    expect(evaluate).toHaveBeenCalledWith(expect.stringContaining('게시'))
+    expect(openTab).toHaveBeenCalledWith(expect.any(String), 'https://www.threads.net')
+    expect(typeAction).toHaveBeenCalledWith('tab1', 'editor-ref', '테스트 포스트 내용입니다.')
+    expect(evaluate).toHaveBeenCalledWith('tab1', expect.stringContaining('Create'))
+    expect(evaluate).toHaveBeenCalledWith('tab1', expect.stringContaining('게시'))
   })
 
   it('로그인 필요 시 로그인 후 게시 → URL 반환', async () => {
@@ -175,8 +181,8 @@ describe('publishPost', () => {
     const result = await promise
 
     expect(result).toBe('https://www.threads.net/@testuser/post/abc123')
-    expect(fill).toHaveBeenCalledWith('email-input', 'test@example.com')
-    expect(fill).toHaveBeenCalledWith('pass-input', 'password123')
+    expect(fill).toHaveBeenCalledWith('tab1', 'email-input', 'test@example.com')
+    expect(fill).toHaveBeenCalledWith('tab1', 'pass-input', 'password123')
   })
 
   it('Instagram 계정 선택 버튼으로 로그인 → URL 반환', async () => {
@@ -197,7 +203,7 @@ describe('publishPost', () => {
     await vi.runAllTimersAsync()
     const result = await promise
 
-    expect(evaluate).toHaveBeenNthCalledWith(1, expect.stringContaining('Continue with Instagram'))
+    expect(evaluate).toHaveBeenNthCalledWith(1, 'tab1', expect.stringContaining('Continue with Instagram'))
     expect(result).toBe('https://www.threads.net/@testuser/post/abc123')
   })
 
@@ -216,13 +222,13 @@ describe('publishPost', () => {
     await vi.runAllTimersAsync()
     const result = await promise
 
-    expect(result).toBe('https://www.threads.com/@testuser')
+    expect(result).toBe('https://www.threads.net/@testuser')
   })
 
   it('evaluate 에러 발생 → null 반환', async () => {
     vi.mocked(readStore).mockReturnValue([makeAccount()])
     vi.mocked(snapshot).mockResolvedValue(LOGGED_IN_HOME)
-    vi.mocked(evaluate).mockRejectedValueOnce(new Error('[Pinchtab] evaluate error'))
+    vi.mocked(evaluate).mockRejectedValueOnce(new Error('[Playwright] evaluate error'))
 
     const result = await publishPost(makePost())
 
@@ -252,7 +258,7 @@ describe('publishReply', () => {
     expect(ensureServer).not.toHaveBeenCalled()
   })
 
-  it('전체 성공 플로우 → true, fill에 replyText 전달', async () => {
+  it('전체 성공 플로우 → true, typeAction에 replyText 전달', async () => {
     vi.mocked(readStore).mockReturnValue([makeAccount()])
     vi.mocked(snapshot).mockResolvedValueOnce(LOGGED_IN_HOME)
     vi.mocked(waitForRef).mockResolvedValueOnce('reply-textbox')
@@ -265,9 +271,9 @@ describe('publishReply', () => {
     const result = await promise
 
     expect(result).toBe(true)
-    expect(navigate).toHaveBeenCalledWith('tab1', 'https://www.threads.net/@testuser/post/abc')
-    expect(typeAction).toHaveBeenCalledWith('reply-textbox', '멋진 답글입니다!')
-    expect(evaluate).toHaveBeenCalledWith(expect.stringContaining('게시'))
+    expect(openTab).toHaveBeenCalledWith(expect.any(String), 'https://www.threads.net/@testuser/post/abc')
+    expect(typeAction).toHaveBeenCalledWith('tab1', 'reply-textbox', '멋진 답글입니다!')
+    expect(evaluate).toHaveBeenCalledWith('tab1', expect.stringContaining('게시'))
   })
 
   it('로그인 후 답글 성공 → true', async () => {
@@ -289,13 +295,13 @@ describe('publishReply', () => {
     const result = await promise
 
     expect(result).toBe(true)
-    expect(typeAction).toHaveBeenCalledWith('reply-textbox', '로그인 후 답글')
+    expect(typeAction).toHaveBeenCalledWith('tab1', 'reply-textbox', '로그인 후 답글')
   })
 
   it('에러 발생 → false', async () => {
     vi.mocked(readStore).mockReturnValue([makeAccount()])
     vi.mocked(snapshot).mockResolvedValue(LOGGED_IN_HOME)
-    vi.mocked(waitForRef).mockRejectedValueOnce(new Error('[Pinchtab] waitForRef timeout'))
+    vi.mocked(waitForRef).mockRejectedValueOnce(new Error('[Playwright] waitForRef timeout'))
 
     const result = await publishReply(
       makePost({ publishedUrl: 'https://www.threads.net/@testuser/post/abc' }),

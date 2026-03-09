@@ -1,17 +1,114 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// ── vi.hoisted ensures mockSpawn is defined before vi.mock factory runs ───────
-const { mockSpawn } = vi.hoisted(() => ({ mockSpawn: vi.fn() }))
+// ── vi.hoisted ensures mock variables are defined before vi.mock factory runs ─
 
-vi.mock('child_process', () => ({
-  spawn: mockSpawn,
+const {
+  mockLaunch,
+  mockNewContext,
+  mockNewPage,
+  mockPageEvaluate,
+  mockPageClose,
+  mockGoto,
+  mockLocator,
+  mockClick,
+  mockFill,
+  mockPressSequentially,
+  mockKeyboardPress,
+  mockInnerText,
+  mockStorageState,
+  mockAddInitScript,
+  mockIsConnected,
+  mockFsExistsSync,
+  mockFsMkdirSync,
+  mockFsReadFileSync,
+  mockFsWriteFileSync,
+} = vi.hoisted(() => {
+  const mockPressSequentially = vi.fn().mockResolvedValue(undefined)
+  const mockFill = vi.fn().mockResolvedValue(undefined)
+  const mockClick = vi.fn().mockResolvedValue(undefined)
+  const mockLocator = vi.fn(() => ({
+    click: mockClick,
+    fill: mockFill,
+    pressSequentially: mockPressSequentially,
+  }))
+  const mockKeyboardPress = vi.fn().mockResolvedValue(undefined)
+  const mockGoto = vi.fn().mockResolvedValue(undefined)
+  const mockInnerText = vi.fn().mockResolvedValue('page body text')
+  const mockPageEvaluate = vi.fn().mockResolvedValue([])
+  const mockPageClose = vi.fn().mockResolvedValue(undefined)
+  const mockStorageState = vi.fn().mockResolvedValue({ cookies: [], origins: [] })
+  const mockAddInitScript = vi.fn().mockResolvedValue(undefined)
+  const mockNewPage = vi.fn().mockResolvedValue({
+    goto: mockGoto,
+    locator: mockLocator,
+    keyboard: { press: mockKeyboardPress },
+    evaluate: mockPageEvaluate,
+    innerText: mockInnerText,
+    close: mockPageClose,
+  })
+  const mockIsConnected = vi.fn(() => false)
+  const mockNewContext = vi.fn().mockResolvedValue({
+    newPage: mockNewPage,
+    storageState: mockStorageState,
+    addInitScript: mockAddInitScript,
+  })
+  const mockLaunch = vi.fn().mockResolvedValue({
+    isConnected: mockIsConnected,
+    newContext: mockNewContext,
+  })
+  const mockFsExistsSync = vi.fn(() => false)
+  const mockFsMkdirSync = vi.fn()
+  const mockFsReadFileSync = vi.fn(() => '{}')
+  const mockFsWriteFileSync = vi.fn()
+
+  return {
+    mockLaunch,
+    mockNewContext,
+    mockNewPage,
+    mockPageEvaluate,
+    mockPageClose,
+    mockGoto,
+    mockLocator,
+    mockClick,
+    mockFill,
+    mockPressSequentially,
+    mockKeyboardPress,
+    mockInnerText,
+    mockStorageState,
+    mockAddInitScript,
+    mockIsConnected,
+    mockFsExistsSync,
+    mockFsMkdirSync,
+    mockFsReadFileSync,
+    mockFsWriteFileSync,
+  }
+})
+
+// ── Mock modules ──────────────────────────────────────────────────────────────
+
+vi.mock('fs', () => ({
+  mkdirSync: mockFsMkdirSync,
+  existsSync: mockFsExistsSync,
+  readFileSync: mockFsReadFileSync,
+  writeFileSync: mockFsWriteFileSync,
+}))
+
+vi.mock('playwright', () => ({
+  chromium: {
+    launch: mockLaunch,
+  },
 }))
 
 // ── Import after mocks ────────────────────────────────────────────────────────
+
 import {
   ensureServer,
-  getTabId,
+  ensureProfile,
+  startInstance,
+  stopInstance,
+  openTab,
+  closeTab,
   navigate,
   snapshot,
   click,
@@ -20,222 +117,262 @@ import {
   press,
   waitForRef,
   evaluate,
+  getText,
 } from '@/lib/pinchtab'
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Setup ─────────────────────────────────────────────────────────────────────
 
-function makeResponse(body: unknown, ok = true, status = 200): Response {
+// Fresh mock page object shared across tests (rebuilt each beforeEach)
+let mockPage: ReturnType<typeof buildMockPage>
+
+function buildMockPage() {
   return {
-    ok,
-    status,
-    json: () => Promise.resolve(body),
-    text: () => Promise.resolve(String(body)),
-  } as unknown as Response
+    goto: mockGoto,
+    locator: mockLocator,
+    keyboard: { press: mockKeyboardPress },
+    evaluate: mockPageEvaluate,
+    innerText: mockInnerText,
+    close: mockPageClose,
+  }
 }
 
-const mockFetch = vi.fn()
+function buildMockCtx() {
+  return {
+    newPage: mockNewPage,
+    storageState: mockStorageState,
+    addInitScript: mockAddInitScript,
+  }
+}
+
+function buildMockBrowser() {
+  return {
+    isConnected: mockIsConnected,
+    newContext: mockNewContext,
+  }
+}
 
 beforeEach(() => {
-  vi.useFakeTimers()
-  vi.stubGlobal('fetch', mockFetch)
-  mockFetch.mockReset()
-  mockSpawn.mockReset()
+  vi.clearAllMocks()
+  mockPage = buildMockPage()
+  mockIsConnected.mockReturnValue(false)
+  mockLaunch.mockResolvedValue(buildMockBrowser())
+  mockNewContext.mockResolvedValue(buildMockCtx())
+  mockNewPage.mockResolvedValue(mockPage)
+  mockPageEvaluate.mockResolvedValue([])
+  mockGoto.mockResolvedValue(undefined)
+  mockLocator.mockImplementation(() => ({
+    click: mockClick,
+    fill: mockFill,
+    pressSequentially: mockPressSequentially,
+  }))
+  mockFsExistsSync.mockReturnValue(false)
 })
 
 afterEach(() => {
   vi.useRealTimers()
-  vi.unstubAllGlobals()
 })
 
 // ── ensureServer ──────────────────────────────────────────────────────────────
 
 describe('ensureServer', () => {
-  it('서버 이미 실행 중이면 spawn을 호출하지 않는다', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse({ status: 'ok' }, true))
+  it('no-op: 아무것도 하지 않고 resolve', async () => {
+    await expect(ensureServer()).resolves.toBeUndefined()
+  })
 
+  it('여러 번 호출해도 에러 없음', async () => {
     await ensureServer()
-
-    expect(mockSpawn).not.toHaveBeenCalled()
-  })
-
-  it('서버가 꺼져 있으면 spawn 후 health 대기 → 성공', async () => {
-    // health check: 실패 → spawn → 첫 폴링 실패 → 두 번째 폴링 성공
-    mockFetch
-      .mockRejectedValueOnce(new Error('ECONNREFUSED'))  // isServerRunning() = false
-      .mockRejectedValueOnce(new Error('not ready'))      // 첫 번째 폴링
-      .mockResolvedValueOnce(makeResponse({ status: 'ok' }, true)) // 두 번째 폴링
-
-    const mockChild = { unref: vi.fn() }
-    mockSpawn.mockReturnValue(mockChild)
-
-    const promise = ensureServer()
-    // 각 500ms delay를 빠르게 진행
-    await vi.runAllTimersAsync()
-
-    await promise
-
-    expect(mockSpawn).toHaveBeenCalledOnce()
-    expect(mockChild.unref).toHaveBeenCalled()
-  })
-
-  it('10초 타임아웃 → 에러 throw', async () => {
-    // 모든 health check 실패
-    mockFetch.mockRejectedValue(new Error('ECONNREFUSED'))
-    const mockChild = { unref: vi.fn() }
-    mockSpawn.mockReturnValue(mockChild)
-
-    const promise = ensureServer()
-    // Attach rejection handler BEFORE advancing timers to avoid unhandled rejection
-    const assertion = expect(promise).rejects.toThrow('서버 시작 실패')
-    await vi.runAllTimersAsync()
-    await assertion
-  })
-
-  it('spawn에 올바른 옵션 전달 (detached, stdio, shell)', async () => {
-    // health check: 실패 → spawn → 바로 성공
-    mockFetch
-      .mockRejectedValueOnce(new Error('ECONNREFUSED'))
-      .mockResolvedValueOnce(makeResponse({}, true))
-
-    const mockChild = { unref: vi.fn() }
-    mockSpawn.mockReturnValue(mockChild)
-
-    const promise = ensureServer()
-    await vi.runAllTimersAsync()
-    await promise
-
-    expect(mockSpawn).toHaveBeenCalledWith('pinchtab', [], {
-      detached: true,
-      stdio: 'ignore',
-      shell: true,
-    })
+    await ensureServer()
+    await ensureServer()
   })
 })
 
-// ── getTabId ──────────────────────────────────────────────────────────────────
+// ── ensureProfile ──────────────────────────────────────────────────────────────
 
-describe('getTabId', () => {
-  it('첫 번째 탭 id 반환', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse({
-      tabs: [
-        { id: 'tab-abc', url: 'https://threads.com', title: 'Threads' },
-      ],
-    }))
-
-    const id = await getTabId()
-
-    expect(id).toBe('tab-abc')
-    const [url] = mockFetch.mock.calls[0]
-    expect(url).toContain('/tabs')
+describe('ensureProfile', () => {
+  it('전달된 name을 그대로 반환', async () => {
+    const result = await ensureProfile('myProfile')
+    expect(result).toBe('myProfile')
   })
 
-  it('탭이 없으면 에러 throw', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse({ tabs: [] }))
+  it('임의의 문자열도 그대로 반환', async () => {
+    const result = await ensureProfile('user_123')
+    expect(result).toBe('user_123')
+  })
+})
 
-    await expect(getTabId()).rejects.toThrow('열린 탭 없음')
+// ── startInstance ──────────────────────────────────────────────────────────────
+
+describe('startInstance', () => {
+  it('profileName을 반환하고 BrowserContext를 생성', async () => {
+    const result = await startInstance('profileA_startInst')
+    expect(result).toBe('profileA_startInst')
+    expect(mockLaunch).toHaveBeenCalledOnce()
+    expect(mockNewContext).toHaveBeenCalledOnce()
+  })
+
+  it('새 profileName이면 새 context 생성', async () => {
+    await startInstance('profileX_si')
+    await startInstance('profileY_si')
+    expect(mockNewContext).toHaveBeenCalledTimes(2)
+  })
+})
+
+// ── stopInstance ──────────────────────────────────────────────────────────────
+
+describe('stopInstance', () => {
+  it('존재하지 않는 instanceId는 조용히 무시', async () => {
+    await expect(stopInstance('nonexistent-instance')).resolves.toBeUndefined()
+  })
+
+  it('존재하는 instance이면 storageState 저장 시도', async () => {
+    const profileName = 'profileStop_si'
+    await startInstance(profileName)
+    await stopInstance(profileName)
+    expect(mockStorageState).toHaveBeenCalledOnce()
+  })
+})
+
+// ── openTab ──────────────────────────────────────────────────────────────────
+
+describe('openTab', () => {
+  it('tabId 반환 (tab_N 형식)', async () => {
+    await startInstance('profileOpen_ot')
+    const tabId = await openTab('profileOpen_ot')
+    expect(tabId).toMatch(/^tab_\d+$/)
+  })
+
+  it('url 전달 시 page.goto 호출', async () => {
+    await startInstance('profileOpenUrl_ot')
+    await openTab('profileOpenUrl_ot', 'https://example.com')
+    expect(mockGoto).toHaveBeenCalledWith('https://example.com', expect.objectContaining({ waitUntil: 'domcontentloaded' }))
+  })
+
+  it('url 없으면 goto 호출 안 함', async () => {
+    await startInstance('profileOpenNoUrl_ot')
+    await openTab('profileOpenNoUrl_ot')
+    expect(mockGoto).not.toHaveBeenCalled()
+  })
+
+  it('연속 호출 시 tabId가 고유하게 증가', async () => {
+    await startInstance('profileOpenSeq_ot')
+    const t1 = await openTab('profileOpenSeq_ot')
+    const t2 = await openTab('profileOpenSeq_ot')
+    expect(t1).not.toBe(t2)
+    const n1 = parseInt(t1.replace('tab_', ''))
+    const n2 = parseInt(t2.replace('tab_', ''))
+    expect(n2).toBeGreaterThan(n1)
   })
 })
 
 // ── navigate ──────────────────────────────────────────────────────────────────
 
 describe('navigate', () => {
-  it('올바른 경로로 POST', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse({}))
+  it('page.goto 호출', async () => {
+    await startInstance('profileNav_nav')
+    const tabId = await openTab('profileNav_nav')
+    // goto was called during openTab? no — openTab with no url doesn't call goto
+    mockGoto.mockClear()
+    await navigate(tabId, 'https://www.threads.net')
+    expect(mockGoto).toHaveBeenCalledWith('https://www.threads.net', expect.objectContaining({ waitUntil: 'domcontentloaded' }))
+  })
 
-    await navigate('tab1', 'https://example.com/path')
-
-    const [url, opts] = mockFetch.mock.calls[0]
-    expect(url).toContain('/navigate')
-    expect(opts.method).toBe('POST')
-    expect(JSON.parse(opts.body)).toEqual({ tabId: 'tab1', url: 'https://example.com/path' })
+  it('존재하지 않는 tabId이면 에러 throw', async () => {
+    await expect(navigate('tab_nonexistent_nav', 'https://example.com'))
+      .rejects.toThrow('[Playwright] Tab not found: tab_nonexistent_nav')
   })
 })
 
 // ── snapshot ──────────────────────────────────────────────────────────────────
 
 describe('snapshot', () => {
-  it('배열 응답 파싱', async () => {
-    const elements = [{ ref: 'e1', role: 'button' }, { ref: 'e2', role: 'textbox' }]
-    mockFetch.mockResolvedValueOnce(makeResponse(elements))
-
-    const result = await snapshot()
-
+  it('page.evaluate 결과를 SnapElement 배열로 반환', async () => {
+    await startInstance('profileSnap_sn')
+    const tabId = await openTab('profileSnap_sn')
+    const elements = [{ ref: 'e1', role: 'button', name: 'Test' }]
+    mockPageEvaluate.mockResolvedValueOnce(elements)
+    const result = await snapshot(tabId)
     expect(result).toEqual(elements)
+    expect(mockPageEvaluate).toHaveBeenCalled()
   })
 
-  it('{ elements: [...] } 래퍼 파싱', async () => {
-    const elements = [{ ref: 'e3', role: 'link' }]
-    mockFetch.mockResolvedValueOnce(makeResponse({ elements }))
-
-    const result = await snapshot()
-
-    expect(result).toEqual(elements)
+  it('빈 배열도 정상 반환', async () => {
+    await startInstance('profileSnapEmpty_sn')
+    const tabId = await openTab('profileSnapEmpty_sn')
+    mockPageEvaluate.mockResolvedValueOnce([])
+    const result = await snapshot(tabId)
+    expect(result).toEqual([])
   })
 
-  it('{ nodes: [...] } 래퍼 파싱', async () => {
-    const nodes = [{ ref: 'e4', role: 'button' }]
-    mockFetch.mockResolvedValueOnce(makeResponse({ nodes }))
-
-    const result = await snapshot()
-
-    expect(result).toEqual(nodes)
-  })
-
-  it('tabId 없이 호출됨 (쿼리스트링에 tabId 없음)', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse([]))
-
-    await snapshot()
-
-    const [url] = mockFetch.mock.calls[0]
-    expect(url).not.toContain('tabId')
-    expect(url).toContain('/snapshot')
-  })
-
-  it('비정상 응답(not ok)이면 에러 throw', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse(null, false, 500))
-
-    await expect(snapshot()).rejects.toThrow('snapshot')
+  it('존재하지 않는 tabId이면 에러 throw', async () => {
+    await expect(snapshot('tab_missing_sn'))
+      .rejects.toThrow('[Playwright] Tab not found: tab_missing_sn')
   })
 })
 
-// ── click / fill / type / press ───────────────────────────────────────────────
+// ── click ──────────────────────────────────────────────────────────────────────
 
-describe('actions', () => {
-  it('click: kind=click과 ref를 전송 (tabId 없음)', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse({}))
-
-    await click('ref-btn')
-
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body)
-    expect(body).toMatchObject({ kind: 'click', ref: 'ref-btn' })
-    expect(body.tabId).toBeUndefined()
+describe('click', () => {
+  it('page.locator([data-ptref="ref"]).click() 호출', async () => {
+    await startInstance('profileClick_cl')
+    const tabId = await openTab('profileClick_cl')
+    await click(tabId, 'btn-ref')
+    expect(mockLocator).toHaveBeenCalledWith('[data-ptref="btn-ref"]')
+    expect(mockClick).toHaveBeenCalledOnce()
   })
 
-  it('fill: kind=fill, ref, text를 전송', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse({}))
+  it('존재하지 않는 tabId이면 에러 throw', async () => {
+    await expect(click('tab_missing_cl', 'ref'))
+      .rejects.toThrow('[Playwright] Tab not found: tab_missing_cl')
+  })
+})
 
-    await fill('ref-input', 'hello world')
+// ── fill ──────────────────────────────────────────────────────────────────────
 
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body)
-    expect(body).toMatchObject({ kind: 'fill', ref: 'ref-input', text: 'hello world' })
+describe('fill', () => {
+  it('page.locator([data-ptref="ref"]).fill(text) 호출', async () => {
+    await startInstance('profileFill_fl')
+    const tabId = await openTab('profileFill_fl')
+    await fill(tabId, 'input-ref', 'hello world')
+    expect(mockLocator).toHaveBeenCalledWith('[data-ptref="input-ref"]')
+    expect(mockFill).toHaveBeenCalledWith('hello world', expect.anything())
   })
 
-  it('type: kind=type, ref, text를 전송', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse({}))
+  it('존재하지 않는 tabId이면 에러 throw', async () => {
+    await expect(fill('tab_missing_fl', 'ref', 'text'))
+      .rejects.toThrow('[Playwright] Tab not found: tab_missing_fl')
+  })
+})
 
-    await typeAction('ref-area', 'typed text')
+// ── type ──────────────────────────────────────────────────────────────────────
 
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body)
-    expect(body).toMatchObject({ kind: 'type', ref: 'ref-area', text: 'typed text' })
+describe('type', () => {
+  it('page.locator([data-ptref="ref"]).pressSequentially(text) 호출', async () => {
+    await startInstance('profileType_ty')
+    const tabId = await openTab('profileType_ty')
+    await typeAction(tabId, 'textarea-ref', 'typed text')
+    expect(mockLocator).toHaveBeenCalledWith('[data-ptref="textarea-ref"]')
+    expect(mockPressSequentially).toHaveBeenCalledWith('typed text', expect.anything())
   })
 
-  it('press: kind=press, ref=keyboard, text=key를 전송', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse({}))
+  it('존재하지 않는 tabId이면 에러 throw', async () => {
+    await expect(typeAction('tab_missing_ty', 'ref', 'text'))
+      .rejects.toThrow('[Playwright] Tab not found: tab_missing_ty')
+  })
+})
 
-    await press('Enter')
+// ── press ──────────────────────────────────────────────────────────────────────
 
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body)
-    expect(body).toMatchObject({ kind: 'press', ref: 'keyboard', text: 'Enter' })
+describe('press', () => {
+  it('page.keyboard.press(key) 호출', async () => {
+    await startInstance('profilePress_pr')
+    const tabId = await openTab('profilePress_pr')
+    await press(tabId, 'Enter')
+    expect(mockKeyboardPress).toHaveBeenCalledWith('Enter')
+  })
+
+  it('존재하지 않는 tabId이면 에러 throw', async () => {
+    await expect(press('tab_missing_pr', 'Enter'))
+      .rejects.toThrow('[Playwright] Tab not found: tab_missing_pr')
   })
 })
 
@@ -243,55 +380,94 @@ describe('actions', () => {
 
 describe('waitForRef', () => {
   it('첫 스냅샷에서 매치되면 즉시 반환', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse([{ ref: 'r1', role: 'button' }]))
-
-    const ref = await waitForRef(els => els[0]?.ref ?? null)
-
+    await startInstance('profileWait1_wfr')
+    const tabId = await openTab('profileWait1_wfr')
+    const elements = [{ ref: 'r1', role: 'button', name: 'Test' }]
+    mockPageEvaluate.mockResolvedValue(elements)
+    const ref = await waitForRef(tabId, els => els[0]?.ref ?? null)
     expect(ref).toBe('r1')
   })
 
   it('여러 번 폴링 후 매치', async () => {
-    // 처음 두 번은 빈 배열, 세 번째에 매치
-    mockFetch
-      .mockResolvedValueOnce(makeResponse([]))
-      .mockResolvedValueOnce(makeResponse([]))
-      .mockResolvedValueOnce(makeResponse([{ ref: 'found' }]))
+    vi.useFakeTimers()
+    await startInstance('profileWait2_wfr')
+    const tabId = await openTab('profileWait2_wfr')
 
-    const promise = waitForRef(els => els[0]?.ref ?? null, 15000)
+    mockPageEvaluate
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ ref: 'found', role: 'button' }])
+
+    const promise = waitForRef(tabId, els => els[0]?.ref ?? null, 15000)
     await vi.runAllTimersAsync()
-
     const ref = await promise
     expect(ref).toBe('found')
   })
 
   it('타임아웃 → 에러 throw', async () => {
-    mockFetch.mockResolvedValue(makeResponse([]))
+    vi.useFakeTimers()
+    await startInstance('profileWait3_wfr')
+    const tabId = await openTab('profileWait3_wfr')
+    mockPageEvaluate.mockResolvedValue([])
 
-    const promise = waitForRef(() => null, 1000)
-    // Attach rejection handler BEFORE advancing timers to avoid unhandled rejection
-    const assertion = expect(promise).rejects.toThrow('waitForRef timeout')
+    const promise = waitForRef(tabId, () => null, 1000)
+    const assertion = expect(promise).rejects.toThrow('[Playwright] waitForRef timeout (1000ms)')
     await vi.runAllTimersAsync()
     await assertion
+  })
+
+  it('존재하지 않는 tabId이면 에러 throw', async () => {
+    await expect(waitForRef('tab_missing_wfr', () => null))
+      .rejects.toThrow('[Playwright] Tab not found: tab_missing_wfr')
   })
 })
 
 // ── evaluate ──────────────────────────────────────────────────────────────────
 
 describe('evaluate', () => {
-  it('result 반환', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse({ result: 'https://threads.com/post/abc' }))
-
-    const result = await evaluate(`document.querySelector('a')?.href`)
-
-    expect(result).toBe('https://threads.com/post/abc')
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body)
-    expect(body.tabId).toBeUndefined()
-    expect(body.expression).toContain('href')
+  it('page.evaluate 결과 반환', async () => {
+    await startInstance('profileEval_ev')
+    const tabId = await openTab('profileEval_ev')
+    mockPageEvaluate.mockResolvedValueOnce('https://threads.net/post/abc')
+    const result = await evaluate(tabId, `document.querySelector('a')?.href`)
+    expect(result).toBe('https://threads.net/post/abc')
   })
 
-  it('error 응답이면 에러 throw', async () => {
-    mockFetch.mockResolvedValueOnce(makeResponse({ error: 'SyntaxError' }))
+  it('존재하지 않는 tabId이면 에러 throw', async () => {
+    await expect(evaluate('tab_missing_ev', 'expression'))
+      .rejects.toThrow('[Playwright] Tab not found: tab_missing_ev')
+  })
+})
 
-    await expect(evaluate('invalid[')).rejects.toThrow('evaluate error')
+// ── getText ───────────────────────────────────────────────────────────────────
+
+describe('getText', () => {
+  it('page.innerText("body") 결과 반환', async () => {
+    await startInstance('profileGetText_gt')
+    const tabId = await openTab('profileGetText_gt')
+    mockInnerText.mockResolvedValueOnce('page body content')
+    const text = await getText(tabId)
+    expect(text).toBe('page body content')
+    expect(mockInnerText).toHaveBeenCalledWith('body')
+  })
+
+  it('존재하지 않는 tabId이면 에러 throw', async () => {
+    await expect(getText('tab_missing_gt'))
+      .rejects.toThrow('[Playwright] Tab not found: tab_missing_gt')
+  })
+})
+
+// ── closeTab ─────────────────────────────────────────────────────────────────
+
+describe('closeTab', () => {
+  it('page.close() 호출 후 tab 제거', async () => {
+    await startInstance('profileCloseTab_ct')
+    const tabId = await openTab('profileCloseTab_ct')
+    await closeTab(tabId)
+    expect(mockPageClose).toHaveBeenCalledOnce()
+  })
+
+  it('존재하지 않는 tabId는 조용히 무시', async () => {
+    await expect(closeTab('tab_nonexistent_ct')).resolves.toBeUndefined()
   })
 })
