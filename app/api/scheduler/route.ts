@@ -11,7 +11,7 @@ export async function GET() {
   writeStore('accounts', accounts)
 
   const status = getStatus()
-  const runningIds = new Set(status.jobs.map((job) => job.accountId))
+  const runningIds = new Set(status.jobs.filter(j => j.type === 'autogen').map((job) => job.accountId))
   const allJobs = status.jobs
   const jobs = accounts.map((account) => ({
     accountId: account.id,
@@ -43,7 +43,10 @@ export async function POST(req: NextRequest) {
     }
     const accounts = normalizeAccounts(readStore<Account[]>('accounts', []))
     const account = accounts.find((item) => item.id === accountId)
-    startJob(accountId, time ?? account?.autoGenTime ?? '08:00')
+    if (!account) {
+      return fail('Account not found', 404, 'NOT_FOUND')
+    }
+    startJob(accountId, time ?? account.autoGenTime ?? '08:00')
     return ok({ action: 'started', accountId })
   }
 
