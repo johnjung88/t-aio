@@ -274,6 +274,7 @@ export function getStatus() {
 
 function addHours(hhmm: string, hours: number): string {
   const [h, m] = hhmm.split(':').map(Number)
+  if (isNaN(h) || isNaN(m)) return '10:00'
   return `${String((h + hours) % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
@@ -291,11 +292,21 @@ export function syncWithAccounts() {
         ? addHours(strategy.bestPostTimes[0], 1)
         : '10:00'
       startEngagementJob(account.id, engTime)
+    } else {
+      // Stop stale engagement job
+      const engKey = `eng_${account.id}`
+      const engJob = jobs.get(engKey)
+      if (engJob) { engJob.task.stop(); jobs.delete(engKey) }
     }
 
     // 3) Performance (autoGen 켜진 계정만)
     if (account.autoGenEnabled) {
       startPerformanceJob(account.id)
+    } else {
+      // Stop stale performance job
+      const perfKey = `perf_${account.id}`
+      const perfJob = jobs.get(perfKey)
+      if (perfJob) { perfJob.task.stop(); jobs.delete(perfKey) }
     }
   }
   console.log(`[Scheduler] syncWithAccounts 완료: ${jobs.size}개 작업 활성`)
