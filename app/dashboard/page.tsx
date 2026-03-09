@@ -44,10 +44,16 @@ export default function DashboardPage() {
   const [posts, setPosts] = useState<ThreadPost[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedAccount, setSelectedAccount] = useState('all')
-  const [schedulerJobs, setSchedulerJobs] = useState<{ accountId: string }[]>([])
+  const [schedulerJobs, setSchedulerJobs] = useState<Array<{
+    accountId: string
+    running: boolean
+    engagementRunning: boolean
+    performanceRunning: boolean
+  }>>([])
   const [engagements, setEngagements] = useState<EngagementTask[]>([])
   const [performance, setPerformance] = useState<PostPerformance[]>([])
   const [strategy, setStrategy] = useState<StrategyConfig | null>(null)
+  const [autopilotLoading, setAutopilotLoading] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -66,6 +72,24 @@ export default function DashboardPage() {
       setStrategy(strRes.data ?? null)
     }).catch(() => {})
   }, [])
+
+  async function handleAutopilot(action: 'syncAll' | 'stopAll') {
+    setAutopilotLoading(true)
+    try {
+      await fetch('/api/scheduler', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      // Refresh scheduler status
+      const schedRes = await fetch('/api/scheduler').then(r => r.json())
+      setSchedulerJobs(schedRes.data?.jobs ?? [])
+    } catch (e) {
+      console.error('[Dashboard] Autopilot action failed:', e)
+    } finally {
+      setAutopilotLoading(false)
+    }
+  }
 
   const filtered = selectedAccount === 'all' ? posts : posts.filter((p) => p.account === selectedAccount)
   const today = new Date().toDateString()
@@ -106,6 +130,54 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Full Autopilot 제어 패널 */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="section-title">🤖 Full Autopilot</div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
+          <button
+            className="btn btn-primary"
+            disabled={autopilotLoading}
+            onClick={() => handleAutopilot('syncAll')}
+            style={{ flex: 1 }}
+          >
+            {autopilotLoading ? '처리 중...' : '▶ 전체 시작'}
+          </button>
+          <button
+            className="btn btn-danger"
+            disabled={autopilotLoading}
+            onClick={() => handleAutopilot('stopAll')}
+            style={{ flex: 1 }}
+          >
+            {autopilotLoading ? '처리 중...' : '■ 전체 중지'}
+          </button>
+        </div>
+        {/* 계정별 3종 크론 상태 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {accounts.map((a) => {
+            const job = schedulerJobs.find(j => j.accountId === a.id)
+            const dots = [
+              { label: '자동생성', active: job?.running ?? false, color: 'var(--primary)' },
+              { label: '인게이지먼트', active: job?.engagementRunning ?? false, color: 'var(--mint)' },
+              { label: '성과수집', active: job?.performanceRunning ?? false, color: 'var(--orange)' },
+            ]
+            return (
+              <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-s)' }}>{a.displayName}</span>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  {dots.map(({ label, active, color }) => (
+                    <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: active ? color : 'var(--text-m)', display: 'inline-block' }} />
+                      <span style={{ fontSize: 10, color: active ? color : 'var(--text-m)' }}>{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+          {accounts.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-m)' }}>계정 없음</div>}
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         {/* ★ Rate Limit 미터 (CCG 인사이트 4번) */}
         <div className="card">
@@ -121,7 +193,7 @@ export default function DashboardPage() {
           <div className="section-title">⚙️ 자동생성 상태</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {accounts.map((a) => {
-              const isActive = schedulerJobs.some((j) => j.accountId === a.id)
+              const isActive = schedulerJobs.find(j => j.accountId === a.id)?.running ?? false
               return (
                 <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
