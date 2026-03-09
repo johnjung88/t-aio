@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 import { readStore, writeStore } from './store'
 import type { ThreadPost, ContentFormat, HookType } from './types'
 
@@ -7,7 +9,7 @@ export interface StrategyInsights {
   dataPoints: number
   topHookTypes: { type: HookType; avgScore: number; count: number }[]
   topContentFormats: { format: ContentFormat; avgScore: number; count: number }[]
-  topPosts: { score: number; text: string; hookType?: string; format?: string }[]
+  topPosts: { score: number; text: string; hookType?: HookType; format?: ContentFormat }[]
 }
 
 // score = likes×2 + replies×3 + reposts×4
@@ -26,14 +28,12 @@ export function computeInsights(accountId: string): void {
   const scored = published.map(p => {
     const latest = p.performanceHistory![p.performanceHistory!.length - 1]
     const score = calcScore(latest)
-    return { post: p, score }
+    const hookType = p.hookAngles?.find(h => h.angle === p.selectedHook)?.type
+    return { post: p, score, hookType }
   }).sort((a, b) => b.score - a.score)
 
   const hookMap = new Map<string, { total: number; count: number }>()
-  for (const { post, score } of scored) {
-    const hookType = post.selectedHook
-      ? post.hookAngles?.find(h => h.angle === post.selectedHook)?.type
-      : undefined
+  for (const { hookType, score } of scored) {
     if (!hookType) continue
     const cur = hookMap.get(hookType) ?? { total: 0, count: 0 }
     hookMap.set(hookType, { total: cur.total + score, count: cur.count + 1 })
@@ -62,10 +62,10 @@ export function computeInsights(accountId: string): void {
     .sort((a, b) => b.avgScore - a.avgScore)
     .slice(0, 3)
 
-  const topPosts = scored.slice(0, 3).map(({ post, score }) => ({
+  const topPosts = scored.slice(0, 3).map(({ post, score, hookType }) => ({
     score,
-    text: post.thread.main.slice(0, 120),
-    hookType: post.hookAngles?.find(h => h.angle === post.selectedHook)?.type as string | undefined,
+    text: (post.thread?.main ?? '').slice(0, 120),
+    hookType: hookType as HookType | undefined,
     format: post.contentFormat,
   }))
 
@@ -84,6 +84,8 @@ export function computeInsights(accountId: string): void {
 
 export function loadInsights(accountId: string): StrategyInsights | null {
   try {
+    const fp = path.join(process.cwd(), 'data', `strategy-insights-${accountId}.json`)
+    if (!fs.existsSync(fp)) return null
     const insights = readStore<StrategyInsights | null>(`strategy-insights-${accountId}`, null)
     if (!insights || insights.dataPoints < 5) return null
     return insights
