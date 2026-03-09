@@ -6,6 +6,7 @@
 import cron, { ScheduledTask } from 'node-cron'
 import { readStore, writeStore } from './store'
 import { getStrategy } from './strategy-store'
+import { computeInsights } from './insights'
 import { selectProductForAccount } from './product-selector'
 import { generateJSON } from './ai'
 import { buildHookGenerationPrompt, buildDraftGenerationPrompt } from './prompts'
@@ -337,6 +338,7 @@ async function runPerformanceCollection(accountId: string) {
     })
     if (res.ok) {
       console.log(`[Scheduler] 성과수집 완료: ${accountId}`)
+      computeInsights(accountId)
     }
   } catch (err) {
     console.error('[Scheduler] 성과수집 실패:', err)
