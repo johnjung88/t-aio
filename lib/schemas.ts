@@ -146,8 +146,8 @@ export interface GenerateDraftInput {
 }
 
 export interface SchedulerActionInput {
-  action: 'start' | 'stop'
-  accountId: string
+  action: 'start' | 'stop' | 'syncAll' | 'stopAll'
+  accountId?: string
   time?: string
 }
 
@@ -272,8 +272,8 @@ export const generateDraftBodySchema = z.object({
 })
 
 export const schedulerBodySchema = z.object({
-  action: z.enum(['start', 'stop'] as const),
-  accountId: z.string().min(1),
+  action: z.enum(['start', 'stop', 'syncAll', 'stopAll'] as const),
+  accountId: z.string().min(1).optional(),
   time: z.string().optional(),
 })
 
