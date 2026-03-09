@@ -6,6 +6,7 @@ import { generateJSON } from '@/lib/ai'
 import { buildDraftGenerationPrompt } from '@/lib/prompts'
 import { readStore, writeStore } from '@/lib/store'
 import { getStrategy } from '@/lib/strategy-store'
+import { loadInsights } from '@/lib/insights'
 import type { AffiliateProduct, ThreadPost } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
@@ -27,11 +28,12 @@ export async function POST(req: NextRequest) {
   if (post.affiliateProductId) {
     product = readStore<AffiliateProduct[]>('affiliates', []).find((item) => item.id === post.affiliateProductId) ?? null
   }
+  const insights = loadInsights(post.account)
 
   const count = replyCount ?? strategy.replyCount ?? 3
   try {
     const draft = await generateJSON<{ main: string; reply1?: string; reply2?: string; reply3?: string }>(
-      buildDraftGenerationPrompt(product, post.topic, post.selectedHook, count, strategy)
+      buildDraftGenerationPrompt(product, post.topic, post.selectedHook, count, strategy, post.contentFormat, insights)
     )
 
     const now = new Date().toISOString()
