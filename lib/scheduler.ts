@@ -8,8 +8,8 @@ import { readStore, writeStore } from './store'
 import { getStrategy } from './strategy-store'
 import { computeInsights, loadInsights } from './insights'
 import { selectProductForAccount } from './product-selector'
-import { generateJSON } from './ai'
-import { buildHookGenerationPrompt, buildDraftGenerationPrompt } from './prompts'
+import { generateJSON, generateText } from './ai'
+import { buildHookGenerationPrompt, buildDraftGenerationPrompt, buildEngagementCommentPrompt } from './prompts'
 import { publishPost, publishReply } from './threads-bot'
 import type { Account, AffiliateProduct, ContentFormat, HookAngle, StrategyConfig, ThreadPost, EngagementTask } from './types'
 
@@ -320,7 +320,7 @@ export function startEngagementJob(accountId: string, time: string) {
   if (existing) { existing.task.stop(); jobs.delete(jobKey) }
 
   const cronExpr = timeToKSTCron(time)
-  const task = cron.schedule(cronExpr, () => runEngagementBatch(accountId), { timezone: 'Asia/Seoul' })
+  const task = cron.schedule(cronExpr, () => { void runEngagementAutoGen(accountId) }, { timezone: 'Asia/Seoul' })
   jobs.set(jobKey, { accountId, task, cronExpr, type: 'engagement' })
   console.log(`[Scheduler] 인게이지먼트 등록: ${accountId} @ ${time}`)
 }
@@ -347,6 +347,89 @@ async function runEngagementBatch(accountId: string) {
   } catch (err) {
     console.error('[Scheduler] 인게이지먼트 실패:', err)
   }
+}
+
+async function runEngagementAutoGen(accountId: string) {
+  console.log(`[Scheduler] 인게이지먼트 자동생성 시작: ${accountId}`)
+  const accounts = readStore<Account[]>('accounts', [])
+  const account = accounts.find(a => a.id === accountId)
+  if (!account) return
+
+  const strategy = getStrategy(accountId)
+  if (!strategy.engagementEnabled) return
+
+  // 오늘 이미 생성된 태스크 수 확인
+  const today = new Date().toISOString().slice(0, 10)
+  const tasks = readStore<EngagementTask[]>('engagements', [])
+  const todayTasks = tasks.filter(t => t.accountId === accountId && t.createdAt?.startsWith(today))
+  const commentTarget = strategy.dailyCommentTarget ?? 10
+  const likeTarget = strategy.dailyLikeTarget ?? 20
+  const todayComments = todayTasks.filter(t => t.action === 'comment').length
+  const todayLikes = todayTasks.filter(t => t.action === 'like').length
+
+  const keywords = strategy.engagementKeywords ?? []
+  if (keywords.length === 0) {
+    console.log(`[Scheduler] 인게이지먼트 키워드 없음: ${accountId}`)
+    await runEngagementBatch(accountId)
+    return
+  }
+
+  // 댓글 자동 생성
+  if (todayComments < commentTarget) {
+    const keyword = keywords[Math.floor(Math.random() * keywords.length)]
+    try {
+      const findRes = await fetch('http://localhost:4000/api/engagement/find-posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId, keyword, limit: 5 }),
+      })
+      if (findRes.ok) {
+        const findData = await findRes.json()
+        const foundPosts: Array<{ url: string; text: string }> = findData.data ?? []
+        for (const foundPost of foundPosts.slice(0, commentTarget - todayComments)) {
+          const commentText = await generateText(
+            buildEngagementCommentPrompt(foundPost.text, account.niche ?? '', strategy)
+          )
+          await fetch('http://localhost:4000/api/engagement', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accountId, action: 'comment', targetUrl: foundPost.url, commentText }),
+          })
+        }
+      }
+    } catch (err) {
+      console.error('[Scheduler] 댓글 자동생성 실패:', err)
+    }
+  }
+
+  // 좋아요 자동 생성
+  if (todayLikes < likeTarget) {
+    const keyword = keywords[Math.floor(Math.random() * keywords.length)]
+    try {
+      const findRes = await fetch('http://localhost:4000/api/engagement/find-posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId, keyword, limit: likeTarget - todayLikes }),
+      })
+      if (findRes.ok) {
+        const findData = await findRes.json()
+        const foundPosts: Array<{ url: string; text: string }> = findData.data ?? []
+        for (const foundPost of foundPosts) {
+          await fetch('http://localhost:4000/api/engagement', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accountId, action: 'like', targetUrl: foundPost.url }),
+          })
+        }
+      }
+    } catch (err) {
+      console.error('[Scheduler] 좋아요 자동생성 실패:', err)
+    }
+  }
+
+  // 생성된 태스크 실행
+  await runEngagementBatch(accountId)
+  console.log(`[Scheduler] 인게이지먼트 자동생성 완료: ${accountId}`)
 }
 
 // ── 성과 수집 cron (6시간마다) ──
