@@ -272,12 +272,33 @@ export function getStatus() {
   }
 }
 
+function addHours(hhmm: string, hours: number): string {
+  const [h, m] = hhmm.split(':').map(Number)
+  return `${String((h + hours) % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
 export function syncWithAccounts() {
   const accounts = readStore<Account[]>('accounts', [])
   for (const account of accounts) {
+    // 1) Autogen
     if (account.autoGenEnabled && account.autoGenTime) startJob(account.id, account.autoGenTime)
     else stopJob(account.id)
+
+    // 2) Engagement
+    const strategy = getStrategy(account.id)
+    if (strategy.engagementEnabled) {
+      const engTime = strategy.bestPostTimes?.[0]
+        ? addHours(strategy.bestPostTimes[0], 1)
+        : '10:00'
+      startEngagementJob(account.id, engTime)
+    }
+
+    // 3) Performance (autoGen 켜진 계정만)
+    if (account.autoGenEnabled) {
+      startPerformanceJob(account.id)
+    }
   }
+  console.log(`[Scheduler] syncWithAccounts 완료: ${jobs.size}개 작업 활성`)
 }
 
 // ── 인게이지먼트 자동화 cron ──
