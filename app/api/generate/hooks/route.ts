@@ -6,6 +6,7 @@ import { generateJSON } from '@/lib/ai'
 import { buildHookGenerationPrompt } from '@/lib/prompts'
 import { readStore, writeStore } from '@/lib/store'
 import { getStrategy } from '@/lib/strategy-store'
+import { loadInsights } from '@/lib/insights'
 import type { AffiliateProduct, HookAngle, ThreadPost } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
@@ -25,9 +26,10 @@ export async function POST(req: NextRequest) {
   if (post.affiliateProductId) {
     product = readStore<AffiliateProduct[]>('affiliates', []).find((item) => item.id === post.affiliateProductId) ?? null
   }
+  const insights = loadInsights(post.account)
 
   try {
-    const hooks = await generateJSON<HookAngle[]>(buildHookGenerationPrompt(product, post.topic, strategy))
+    const hooks = await generateJSON<HookAngle[]>(buildHookGenerationPrompt(product, post.topic, strategy, insights))
     const now = new Date().toISOString()
 
     writeStore(
