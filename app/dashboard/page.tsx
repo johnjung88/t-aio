@@ -54,6 +54,7 @@ export default function DashboardPage() {
   const [performance, setPerformance] = useState<PostPerformance[]>([])
   const [strategy, setStrategy] = useState<StrategyConfig | null>(null)
   const [autopilotLoading, setAutopilotLoading] = useState(false)
+  const [autopilotError, setAutopilotError] = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -75,16 +76,23 @@ export default function DashboardPage() {
 
   async function handleAutopilot(action: 'syncAll' | 'stopAll') {
     setAutopilotLoading(true)
+    setAutopilotError(null)
     try {
-      await fetch('/api/scheduler', {
+      const res = await fetch('/api/scheduler', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
       })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        setAutopilotError(data.error?.message ?? '오토파일럿 실행 실패')
+        return
+      }
       // Refresh scheduler status
       const schedRes = await fetch('/api/scheduler').then(r => r.json())
       setSchedulerJobs(schedRes.data?.jobs ?? [])
     } catch (e) {
+      setAutopilotError('네트워크 오류가 발생했습니다')
       console.error('[Dashboard] Autopilot action failed:', e)
     } finally {
       setAutopilotLoading(false)
@@ -151,6 +159,11 @@ export default function DashboardPage() {
             {autopilotLoading ? '처리 중...' : '■ 전체 중지'}
           </button>
         </div>
+        {autopilotError && (
+          <div style={{ fontSize: 12, color: 'var(--orange)', marginBottom: 12 }}>
+            ⚠ {autopilotError}
+          </div>
+        )}
         {/* 계정별 3종 크론 상태 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {accounts.map((a) => {
