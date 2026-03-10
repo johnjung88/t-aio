@@ -1,0 +1,12 @@
+[52257650ms] [ERROR] WebSocket is already in CLOSING or CLOSED state. @ https://static.cdninstagram.com/rsrc.php/v4iA4l4/yb/l/ko_KR-j/BitZ4hzckro.js:253
+[67097727ms] [ERROR] Failed to load resource: the server responded with a status of 572 () @ https://www.threads.com/graphql/query:0
+[67150837ms] [ERROR] Failed to load resource: the server responded with a status of 572 () @ https://www.threads.com/graphql/query:0
+[67358233ms] [ERROR] Failed to load resource: the server responded with a status of 572 () @ https://www.threads.com/graphql/query:0
+[91740961ms] [ERROR] WebSocket is already in CLOSING or CLOSED state. @ https://static.cdninstagram.com/rsrc.php/v4iA4l4/yb/l/ko_KR-j/BitZ4hzckro.js:253
+[93660008ms] [ERROR] WebSocket is already in CLOSING or CLOSED state. @ https://static.cdninstagram.com/rsrc.php/v4iA4l4/yb/l/ko_KR-j/BitZ4hzckro.js:253
+[95701509ms] [ERROR] WebSocket is already in CLOSING or CLOSED state. @ https://static.cdninstagram.com/rsrc.php/v4iA4l4/yb/l/ko_KR-j/BitZ4hzckro.js:253
+[105609669ms] [ERROR] ErrorUtils caught an error:
+
+Non-object thrown: ACK_TIMEOUT [Caught in: Failed to establish lightspeed stream]
+
+Subsequent non-fatal errors won't be logged; see https://fburl.com/debugjs. {column: 180, clientTime: 1773110801, extra: Object, guardList: Array(0), hash: miijvz} @ https://static.cdninstagram.com/rsrc.php/v4/ya/r/Hf54VCqkkAe.js:76

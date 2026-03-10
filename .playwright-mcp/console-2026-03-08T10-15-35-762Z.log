@@ -1,0 +1,7 @@
+[   35549ms] [ERROR] Permissions policy violation: unload is not allowed in this document. @ https://static.xx.fbcdn.net/rsrc.php/v4/ya/r/Hf54VCqkkAe.js:249
+[11183787ms] [ERROR] WebSocket is already in CLOSING or CLOSED state. @ https://static.cdninstagram.com/rsrc.php/v4iA4l4/yb/l/ko_KR-j/BitZ4hzckro.js:253
+[14102631ms] [ERROR] ErrorUtils caught an error:
+
+Non-object thrown: 4002:Internal Server Error [Caught in: Failed to establish lightspeed stream]
+
+Subsequent non-fatal errors won't be logged; see https://fburl.com/debugjs. {column: 180, clientTime: 1772979038, extra: Object, guardList: Array(0), hash: miijvz} @ https://static.cdninstagram.com/rsrc.php/v4/ya/r/Hf54VCqkkAe.js:76

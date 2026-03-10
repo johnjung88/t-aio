@@ -1,0 +1,1 @@
+[  104312ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:4000/api/posts/f99ce904-aa6b-4f87-9e03-1a416392985c/publish:0

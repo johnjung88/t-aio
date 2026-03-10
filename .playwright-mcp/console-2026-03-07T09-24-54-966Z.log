@@ -1,0 +1,12 @@
+[    4753ms] [WARNING] setPolicyInfo {versionInfo: Object, sdkInfo: Object, sentryInfo: Object} @ https://ssl.pstatic.net/tveta/libs/glad/prod/gfp-core.js:0
+[    5511ms] [WARNING] Google Maps JavaScript API has been loaded directly without loading=async. This can result in suboptimal performance. For best-practice loading patterns please see https://goo.gle/js-api-loading @ https://maps.google.co.kr/maps/api/js?v=3&client=gme-nhncorp&language=ko&channel=naver_blog:332
+[    5745ms] [WARNING] MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 visible listeners added. Use emitter.setMaxListeners() to increase limit
+    at h (https://editor-static.pstatic.net/v/basic/1.73.0/se.viewer.js?v=1.73.0-20260102183640:6:27262)
+    at s.on.s.addListener (https://editor-static.pstatic.net/v/basic/1.73.0/se.viewer.js?v=1.73.0-20260102183640:6:29831)
+    at new t (https://editor-static.pstatic.net/v/basic/1.73.0/se.24.6bf71b05.js:1:2126)
+    at https://editor-static.pstatic.net/v/basic/1.73.0/se.viewer.js?v=1.73.0-20260102183640:12:53355 @ https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/blogOnMap-3a797e3_https.js:1
+[    5745ms] [WARNING] MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 invisible listeners added. Use emitter.setMaxListeners() to increase limit
+    at h (https://editor-static.pstatic.net/v/basic/1.73.0/se.viewer.js?v=1.73.0-20260102183640:6:27262)
+    at s.on.s.addListener (https://editor-static.pstatic.net/v/basic/1.73.0/se.viewer.js?v=1.73.0-20260102183640:6:29831)
+    at new t (https://editor-static.pstatic.net/v/basic/1.73.0/se.24.6bf71b05.js:1:2161)
+    at https://editor-static.pstatic.net/v/basic/1.73.0/se.viewer.js?v=1.73.0-20260102183640:12:53355 @ https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/blogOnMap-3a797e3_https.js:1
